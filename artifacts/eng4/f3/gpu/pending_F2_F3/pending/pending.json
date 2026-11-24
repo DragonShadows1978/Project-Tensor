@@ -1,0 +1,144 @@
+{
+ "rows": [
+  {
+   "arm": "F2",
+   "variant": "forward",
+   "child_exit": 0,
+   "stderr_tail": "",
+   "make_pending": {
+    "raised": {
+     "type": "RuntimeError",
+     "message": "cudaMalloc failed: out of memory"
+    }
+   },
+   "k0_matmul": {
+    "raised": {
+     "type": "RuntimeError",
+     "message": "CUDA error at matmul zero fill: out of memory"
+    }
+   },
+   "drain": {
+    "returned": null
+   },
+   "final_slot_clean": true
+  },
+  {
+   "arm": "F2",
+   "variant": "gradient",
+   "child_exit": 0,
+   "stderr_tail": "",
+   "make_pending": {
+    "raised": {
+     "type": "RuntimeError",
+     "message": "cudaMalloc failed: out of memory"
+    }
+   },
+   "backward": {
+    "raised": {
+     "type": "RuntimeError",
+     "message": "CUDA error at matmul backward zero gradient: out of memory"
+    }
+   },
+   "drain": {
+    "returned": null
+   },
+   "readback": {
+    "returned": null
+   },
+   "final_slot_clean": true
+  },
+  {
+   "arm": "F3",
+   "variant": "forward",
+   "child_exit": 0,
+   "stderr_tail": "",
+   "make_pending": {
+    "raised": {
+     "type": "RuntimeError",
+     "message": "cudaMalloc failed: out of memory"
+    }
+   },
+   "k0_matmul": {
+    "returned": [
+     2,
+     3
+    ]
+   },
+   "drain": {
+    "raised": {
+     "type": "RuntimeError",
+     "message": "CUDA error at sync: out of memory"
+    }
+   },
+   "readback": {
+    "returned": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0
+     ]
+    ]
+   },
+   "final_slot_clean": true
+  },
+  {
+   "arm": "F3",
+   "variant": "gradient",
+   "child_exit": 0,
+   "stderr_tail": "",
+   "make_pending": {
+    "raised": {
+     "type": "RuntimeError",
+     "message": "cudaMalloc failed: out of memory"
+    }
+   },
+   "backward": {
+    "returned": [
+     0,
+     2,
+     4
+    ]
+   },
+   "drain": {
+    "raised": {
+     "type": "RuntimeError",
+     "message": "CUDA error at sync: out of memory"
+    }
+   },
+   "readback": {
+    "returned": {
+     "shape": [
+      3,
+      4
+     ],
+     "u32": [
+      [
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    }
+   },
+   "final_slot_clean": true
+  }
+ ]
+}

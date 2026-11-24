@@ -1,0 +1,516 @@
+{
+ "written_utc": "2026-11-23T15:10:29.654249+00:00",
+ "MUTANTS_F2.json_sha256": "db6b5ed9f13bf501161a805fde3f92a60852f94c0245a4b1f11c301f182b3617",
+ "mutants": {
+  "m09_f2_naive_product": {
+   "module_sha256": "a2e81be14dd9a0e2b933a8c93f0833ce5ec785bf4bacb129ba3b41993f89b76c",
+   "named_assertion": "test_j1_y1_refuses_before_overflow: pytest.raises(RuntimeError, match='^matmul refused: GEMM batch count above INT_MAX: the product of A's leading extents exceeds 2147483647 at leading dimension <d> ...') -- the naive product wraps (2^64 -> 0; 3 * 2^62 -> negative), the mutant accepts and the call stops at the output byte bound (OverflowError): 'Regex pattern did not match' or a non-RuntimeError exception (pytest reports the OverflowError as the failure).",
+   "cpu_rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y1_refuses_before_overflow[2^32_2^32]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "OverflowError: NDArray: byte size overflows int64 for shape [4294967296, 4294967296, 0, 4] and dtype float32 (nonzero extents count next to zero)",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m09_f2_naive_product_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y1_refuses_before_overflow[2^16_2^48]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "OverflowError: NDArray: byte size overflows int64 for shape [65536, 281474976710656, 0, 4] and dtype float32 (nonzero extents count next to zero)",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m09_f2_naive_product_1.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y1_refuses_before_overflow[3_2^62]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "OverflowError: NDArray: byte size overflows int64 for shape [3, 4611686018427387904, 0, 4] and dtype float32 (nonzero extents count next to zero)",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m09_f2_naive_product_2.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y1_refuses_before_overflow[2^31-1_2^31-1_4]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "OverflowError: NDArray: byte size overflows int64 for shape [2147483647, 2147483647, 4, 0, 4] and dtype float32 (nonzero extents count next to zero)",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m09_f2_naive_product_3.xml"
+    }
+   ],
+   "cpu_killing_tests": 4,
+   "killed_on_cpu": true
+  },
+  "m10_f2_empty_batch_raise": {
+   "module_sha256": "5e20548f8ef6769a480a209b74629c00ce4ea77f707b53d9f77e92a21ba4106b",
+   "named_assertion": "the zero-gradient check of test_j1_y2_empty_batch_shared_b_zero_gradient (CPU, host float16/bfloat16) and test_gpu_bwd0_zero_gradient (GPU line mut_m10_f2, float32 included): pytest.fail('zero-gradient check: ... the backward raised: reshape: element count mismatch')",
+   "cpu_rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[float16-a-N]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[float16-a-T]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_1.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[float16-c-N]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_2.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[float16-c-T]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_3.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[float16-a_rank4-N]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_4.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[float16-a_rank4-T]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_5.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[float16-c_rank4_b3-N]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_6.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[float16-c_rank4_b3-T]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_7.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[bfloat16-a-N]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_8.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[bfloat16-a-T]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_9.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[bfloat16-c-N]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_10.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[bfloat16-c-T]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_11.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[bfloat16-a_rank4-N]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_12.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[bfloat16-a_rank4-T]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_13.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[bfloat16-c_rank4_b3-N]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_14.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_j1_y2_empty_batch_shared_b_zero_gradient[bfloat16-c_rank4_b3-T]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f2/mutants/runs/m10_f2_empty_batch_raise_15.xml"
+    }
+   ],
+   "cpu_killing_tests": 16,
+   "killed_on_cpu": true,
+   "gpu_line": {
+    "line": "mut_m10_f2",
+    "rows": [
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float32-a-N]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_0.log",
+      "junit": "m10_0.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float32-a-T]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_1.log",
+      "junit": "m10_1.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float32-c-N]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_2.log",
+      "junit": "m10_2.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float32-c-T]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_3.log",
+      "junit": "m10_3.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float32-a_rank4-N]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_4.log",
+      "junit": "m10_4.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float32-a_rank4-T]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_5.log",
+      "junit": "m10_5.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float32-c_rank4_b3-N]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_6.log",
+      "junit": "m10_6.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float32-c_rank4_b3-T]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_7.log",
+      "junit": "m10_7.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float16-a-N]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_8.log",
+      "junit": "m10_8.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float16-a-T]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_9.log",
+      "junit": "m10_9.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float16-c-N]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_10.log",
+      "junit": "m10_10.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float16-c-T]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_11.log",
+      "junit": "m10_11.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float16-a_rank4-N]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_12.log",
+      "junit": "m10_12.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float16-a_rank4-T]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_13.log",
+      "junit": "m10_13.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float16-c_rank4_b3-N]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_14.log",
+      "junit": "m10_14.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[float16-c_rank4_b3-T]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_15.log",
+      "junit": "m10_15.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[bfloat16-a-N]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_16.log",
+      "junit": "m10_16.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[bfloat16-a-T]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_17.log",
+      "junit": "m10_17.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[bfloat16-c-N]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_18.log",
+      "junit": "m10_18.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[bfloat16-c-T]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_19.log",
+      "junit": "m10_19.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[bfloat16-a_rank4-N]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_20.log",
+      "junit": "m10_20.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[bfloat16-a_rank4-T]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_21.log",
+      "junit": "m10_21.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[bfloat16-c_rank4_b3-N]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_22.log",
+      "junit": "m10_22.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_bwd0_zero_gradient[bfloat16-c_rank4_b3-T]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward raised: reshape: element count mismatch",
+      "log": "m10_23.log",
+      "junit": "m10_23.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     }
+    ],
+    "killed": true
+   }
+  }
+ }
+}

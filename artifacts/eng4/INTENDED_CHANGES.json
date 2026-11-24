@@ -1,0 +1,62 @@
+{
+ "written_utc": "2026-11-23T12:55:02.115465+00:00",
+ "written_before": "G4's after-run (Build E suite, CPU and GPU halves)",
+ "ruling": "order M7: the forward M3 now refuses is asserted as a refusal; same parametrization; no gradient",
+ "changes": [
+  {
+   "test_ids": [
+    "tensor_cuda/tests/test_bwd_r1_matmul.py::test_gpu_refuses_forward_first_batch_only[a_batch0-b_batch0]",
+    "tensor_cuda/tests/test_bwd_r1_matmul.py::test_gpu_refuses_forward_first_batch_only[a_batch1-b_batch1]",
+    "tensor_cuda/tests/test_bwd_r1_matmul.py::test_gpu_refuses_forward_first_batch_only[a_batch2-b_batch2]"
+   ],
+   "parametrization": [
+    {
+     "a_batch": [],
+     "b_batch": [
+      2
+     ]
+    },
+    {
+     "a_batch": [
+      2,
+      1
+     ],
+     "b_batch": [
+      2
+     ]
+    },
+    {
+     "a_batch": [
+      2
+     ],
+     "b_batch": [
+      1,
+      2
+     ]
+    }
+   ],
+   "m3_class": [
+    "unequal ranks, A rank 2, B rank 3 batch [2]",
+    "unequal ranks, A rank 4, B rank 3 batch [2]",
+    "unequal ranks, A rank 3, B rank 4 batch [1, 2] (not all ones)"
+   ],
+   "old_assertion": "output = tc.matmul(a, b) succeeds; pytest.raises(RuntimeError, match='forward uses stride 0 and only the first B matrix') around output.backward(); a.grad, b.grad and output.grad are None",
+   "new_assertion": "pytest.raises(RuntimeError, match=r'A \\[<A shape>\\].*B \\[<B shape>\\]') around tc.matmul(a, b); a.grad and b.grad are None (there is no output)",
+   "marker": "@gpu unchanged (skipped on the CPU lane in both builds)",
+   "expected_outcome": {
+    "cpu": {
+     "B": "skipped",
+     "E": "skipped"
+    },
+    "gpu": {
+     "B": "passed",
+     "E": "passed"
+    }
+   }
+  }
+ ],
+ "searched_for_others": "rg over tensor_cuda/tests and tests for the old messages ('first B', 'stride 0', 'batch size mismatch', 'needs >=2D', 'inner dim mismatch') and for explicit mismatched-batch matmul calls: the only other hit is test_bwd_r1_native.py::test_host_native_backward_checks[batch-mismatch], whose shapes ([2,2,0] x [3,0,3]) the shape check still refuses with 'batch size mismatch' -> expected unchanged (passed in both builds)",
+ "not_existing_tests": [
+  "tensor_cuda/tests/test_eng4_matmul.py (new this round; excluded from G4's suite runs, run on its own as G1 and as a GPU line)"
+ ]
+}

@@ -788,20 +788,26 @@ NDArray matmul_backward(const NDArray& a, const NDArray& b, float alpha, bool tr
       !b.device.is_cuda() || a.device.index != b.device.index)
     throw std::runtime_error("matmul backward: expected same-device CUDA fp32 matrices");
 
-  const int64_t m = a.shape[na - 2], k = a.shape[na - 1];
-  const int64_t n = b.shape[nb - (trans_b ? 2 : 1)];
-  if (m > INT_MAX || n > INT_MAX || k > INT_MAX || k != b.shape[nb - (trans_b ? 1 : 2)])
-    throw std::runtime_error("matmul backward: invalid GEMM dimensions");
-
-  Shape batch_shape(a.shape.begin(), a.shape.end() - 2);
-  const auto batches = numel_of(batch_shape);
-  if (batches > INT_MAX) throw std::runtime_error("matmul backward: invalid GEMM batch count");
-  const bool batched_b = na == nb;
-  if (batched_b && batches != numel_of(Shape(b.shape.begin(), b.shape.end() - 2)))
-    throw std::runtime_error("matmul backward: batch size mismatch");
-  Shape out_shape = std::move(batch_shape);
-  out_shape.push_back(m);
-  out_shape.push_back(n);
+  // ENG4 (M5): one operand predicate with the forward (tc::matmul_operand_plan, matmul.cu). The count-based batch
+  // check this replaced accepted equal counts with different batch shapes; the predicate requires equal shapes at
+  // equal ranks (M2(b)) and every leading B extent 1 at unequal ranks (M2(c)). The messages keep their BWD text.
+  // Prior art: as matmul.cu (cuBLAS strided-batched contract; NumPy matmul); ours: sharing one predicate.
+  const MatmulOperandPlan plan = matmul_operand_plan(a, b, trans_b);
+  switch (plan.issue) {
+    case MatmulOperandIssue::None: break;
+    case MatmulOperandIssue::InnerDim:
+    case MatmulOperandIssue::Dim: throw std::runtime_error("matmul backward: invalid GEMM dimensions: " + plan.detail);
+    case MatmulOperandIssue::BatchCount:
+      throw std::runtime_error("matmul backward: invalid GEMM batch count: " + plan.detail);
+    case MatmulOperandIssue::BatchShape:
+      throw std::runtime_error("matmul backward: batch size mismatch: " + plan.detail);
+    default:  // rank, dtype and device were refused above; kept so no issue can pass silently
+      throw std::runtime_error("matmul backward: expected same-device CUDA fp32 matrices: " + plan.detail);
+  }
+  const int64_t m = plan.m, k = plan.k, n = plan.n;
+  const auto batches = plan.batch;
+  const bool batched_b = plan.batched_b;  // == (na == nb) for every accepted pair, as before
+  Shape out_shape = plan.out_shape;
 
   int device;
   check_backward_cuda(cudaGetDevice(&device), "cudaGetDevice");
@@ -829,6 +835,9 @@ Tensor matmul(const Tensor& a, const Tensor& b, float alpha, bool trans_b) {
     if (a.ndim() != b.ndim() && b.ndim() > 2) {
       // Forward's rank-mismatch stride 0 selects the first stored B matrix.
       // It is true broadcasting only if every leading B extent is one.
+      // ENG4 (M5): since the forward's operand predicate (tc::matmul_operand_plan) refuses unequal ranks with a
+      // non-singleton B batch before any CUDA call, this refusal is unreachable through the forward. It stays as a
+      // guard in case the forward's contract ever changes.
       if (std::any_of(weight.shape.begin(), weight.shape.end() - 2,
                       [](int64_t dim) { return dim != 1; }))
         throw std::runtime_error("matmul backward: forward uses stride 0 and only the first B matrix "
@@ -838,6 +847,22 @@ Tensor matmul(const Tensor& a, const Tensor& b, float alpha, bool trans_b) {
     // C = alpha * A @ op(B).  dA = alpha * g @ op(B)^T: trans_b flips, reusing
     // the no-copy OP_T read.  dB: non-trans alpha*A^T@g, trans alpha*g^T@A.
     a.v->accumulate_grad(matmul_backward(g, weight, alpha, !trans_b));
+    // ENG4-F2 Y2 (ENG4R2-F02): a shared B (classes a and c: unequal ranks) under an empty A batch (a zero leading
+    // extent) gets the gradient its forward implies, the empty sum over the batch, i.e. zeros of B's own shape and
+    // dtype. Before, the zero-batch dB intermediate reached reduce_to, whose reshape to B's nonempty shape raised.
+    // A's (empty) gradient is accumulated above as before; reduce_to is unchanged. The zero fill is checked like the
+    // forward's K = 0 fill. Prior art: the gradient of a broadcast operand is the sum over the broadcast axes, zero
+    // over an empty axis (reverse-mode autodiff; PyTorch's sum_to_size); NumPy's empty sum is 0. Ours: the placement.
+    const auto& a_shape = a.data().shape;
+    if (a.ndim() != b.ndim() &&
+        std::any_of(a_shape.begin(), a_shape.end() - 2, [](int64_t dim) { return dim == 0; })) {
+      const NDArray& b_data = b.data();
+      // ENG4-F3 Z2: the fill's own status is checked (zeros_checked, matmul.cu); the last-error slot is not read,
+      // and an empty B makes no fill and no CUDA call.
+      NDArray zero_b = zeros_checked(b_data.shape, b_data.dtype, b_data.device, "matmul backward zero gradient");
+      b.v->accumulate_grad(zero_b);
+      return;
+    }
     // Shared B contributes one dB per A batch. The existing reduce_to path in
     // accumulate_grad sums these in the engine's fixed reduction order.
     // Reduce against the rank-2 view before restoring any singleton B axes.

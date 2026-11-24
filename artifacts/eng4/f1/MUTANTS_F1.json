@@ -1,0 +1,178 @@
+{
+ "written_utc": "2026-11-23T13:47:33.476631+00:00",
+ "rule": "each mutant must fail its named assertion in each killing test; the expected failures come from the order (H4, L47); each killing test's captured stderr must show the mutated line ran (L41)",
+ "base": {
+  "tree": "Build F1 sources",
+  "matmul.cu": "4923c9a8b83955f692423e83d67e7767e9d11e03646594ac8f436a33a681e0ee",
+  "bindings.cpp": "2efe29404c6e86ee00e54d823566683ffbe732dc3610a03a4d9ac7a977e4d3dc"
+ },
+ "mutants": {
+  "m01_f1": {
+   "file": "src/matmul.cu",
+   "what": "the shared predicate compares batch COUNTS at equal ranks, not shapes",
+   "old": "    for (int d = 0; d < nda - 2; ++d)\n      if (a.shape[d] != b.shape[d])\n        return refuse(p, MatmulOperandIssue::BatchShape,\n",
+   "new": "    int64_t eng4_bcount = 1;\n    for (int d = 0; d < ndb - 2; ++d) eng4_bcount *= b.shape[d];\n    std::fprintf(stderr, \"ENG4-MUTANT m01_f1 executed\\n\"); std::fflush(stderr); \n      if (eng4_bcount != p.batch)\n        return refuse(p, MatmulOperandIssue::BatchShape,\n",
+   "killing_tests": [
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m3_refuses[eq_count_diff_shape]"
+   ],
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul refused: .*batch.*(A [2, 3, 2, 3] on ..., B [3, 2, 3, 4] on ...') -- the mutant accepts the equal-count pair, so the call reaches the GEMM and raises the no-device CUDA error instead (regex does not match)",
+   "order_source": "G5 m01 (G1 equal-count case)",
+   "run": "CPU",
+   "eng4_id": "m01_count_not_shape"
+  },
+  "m02_f1": {
+   "file": "src/matmul.cu",
+   "what": "the forward's predicate drops the device check",
+   "old": "  if (a.device.type != b.device.type || a.device.index != b.device.index)\n    return refuse(p, MatmulOperandIssue::Device, \"operands are on different devices\", a, b, trans_b);\n",
+   "new": "  std::fprintf(stderr, \"ENG4-MUTANT m02_f1 executed\\n\"); std::fflush(stderr); \n",
+   "killing_tests": [
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_device_refuses[host_a_cuda_b]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_device_refuses[cuda_a_host_b]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_m4_device_refuses_nonzero_operands[cuda_a_host_b]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_m4_device_refuses_nonzero_operands[host_a_cuda_b]"
+   ],
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul refused: operands are on different devices (A ... on <dev>, B ... on <dev>') -- CPU: the zero-element CUDA operand lets the call reach the output allocation / GEMM (CUDA error); GPU line: nonzero host + CUDA operands reach cuBLAS (any outcome other than the refusal fails the regex or 'DID NOT RAISE')",
+   "order_source": "G5 m02 (G1, mixed host and CUDA operands, staged GPU line)",
+   "run": "CPU witness + staged GPU line mut_m02",
+   "eng4_id": "m02_no_device_check"
+  },
+  "m03_f1": {
+   "file": "src/matmul.cu",
+   "what": "the forward's predicate drops the INT_MAX checks (M, N, K and the batch count)",
+   "old": [
+    "  if (p.m > INT_MAX || p.n > INT_MAX || p.k > INT_MAX)\n    return refuse(p, MatmulOperandIssue::Dim,\n",
+    "  if (p.batch > INT_MAX)\n    return refuse(p, MatmulOperandIssue::BatchCount,\n"
+   ],
+   "new": [
+    "  std::fprintf(stderr, \"ENG4-MUTANT m03_f1 executed\\n\"); std::fflush(stderr); \n  if (false)\n    return refuse(p, MatmulOperandIssue::Dim,\n",
+    "  if (false)\n    return refuse(p, MatmulOperandIssue::BatchCount,\n"
+   ],
+   "killing_tests": [
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[M_over_intmax]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[N_over_intmax]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[N_over_intmax_trans]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[K_over_intmax]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[K_over_intmax_trans]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[batch_over_intmax_b2d]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[batch_over_intmax_eq_rank]"
+   ],
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul refused: GEMM (dimension|batch count) above INT_MAX.*(A ..., B ...') -- the mutant lets the call reach the GEMM (no-device CUDA error)",
+   "order_source": "G5 m03 (G1)",
+   "run": "CPU",
+   "eng4_id": "m03_no_intmax"
+  },
+  "m04_f1": {
+   "file": "src/matmul.cu",
+   "what": "the predicate accepts an all-ones B batch at equal ranks (as a stride-0 broadcast)",
+   "old": "    for (int d = 0; d < nda - 2; ++d)\n      if (a.shape[d] != b.shape[d])\n        return refuse(p, MatmulOperandIssue::BatchShape,\n                      \"equal ranks need equal batch shapes, dimension by dimension\", a, b, trans_b);\n    p.batched_b = true;\n",
+   "new": "    bool eng4_ones = true;\n    for (int d = 0; d < ndb - 2; ++d) eng4_ones = eng4_ones && b.shape[d] == 1;\n    if (eng4_ones) { std::fprintf(stderr, \"ENG4-MUTANT m04_f1 executed\\n\"); std::fflush(stderr); }\n    for (int d = 0; d < nda - 2 && !eng4_ones; ++d)\n      if (a.shape[d] != b.shape[d])\n        return refuse(p, MatmulOperandIssue::BatchShape,\n                      \"equal ranks need equal batch shapes, dimension by dimension\", a, b, trans_b);\n    p.batched_b = !eng4_ones;\n",
+   "killing_tests": [
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m3_refuses[eq_rank_ones_b_under_larger_a]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m3_refuses[eq_rank_ones_b_under_larger_a_rank4]"
+   ],
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul refused: .*batch.*(A [2, 2, 3] ..., B [1, 3, 4] ...') (and the rank-4 case) -- the mutant accepts, the call reaches the GEMM",
+   "order_source": "G5 m04 (G1, M3 case)",
+   "run": "CPU",
+   "eng4_id": "m04_ones_any_rank"
+  },
+  "m05_f1": {
+   "file": "src/bindings.cpp",
+   "what": "numpy_dtype returns float32 for unlisted dtypes again",
+   "old": "  throw py::type_error(\"tensor: unsupported NumPy dtype \"",
+   "new": "  std::fprintf(stderr, \"ENG4-MUTANT m05_f1 executed\\n\"); std::fflush(stderr); return DType::Float32;\n  throw py::type_error(\"tensor: unsupported NumPy dtype \"",
+   "killing_tests": [
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[float64-_C.tensor]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[float64-from_numpy]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[int32-_C.tensor]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[int32-from_numpy]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[uint16-_C.tensor]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[uint16-from_numpy]"
+   ],
+   "named_assertion": "pytest.raises(TypeError, match='unsupported NumPy dtype <name>') -- the mutant returns a float32 tensor: 'DID NOT RAISE'",
+   "order_source": "G5 m05 (G1, N1)",
+   "run": "CPU",
+   "eng4_id": "m05_numpy_dtype_fallback"
+  },
+  "m06_dtype_after_alloc": {
+   "file": "src/matmul.cu",
+   "what": "the supported-dtype check moves back after the output allocation (the dispatch's final else)",
+   "old": "  if (a.dtype != DType::Float32 && a.dtype != DType::Float16 && a.dtype != DType::BFloat16)\n    return refuse(p, MatmulOperandIssue::UnsupportedDtype,",
+   "new": "  std::fprintf(stderr, \"ENG4-MUTANT m06_dtype_after_alloc executed\\n\"); std::fflush(stderr); \n  if (false)\n    return refuse(p, MatmulOperandIssue::UnsupportedDtype,",
+   "order_source": "H4 m06 (H1, host int64 pair)",
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul supports float32/float16/bfloat16 only: operand dtype <d> (A ..., B ...)') -- host K = 0 / empty-output pairs then return a result ('DID NOT RAISE'); the zero-element CUDA pair reaches its output allocation (cudaMalloc error, regex mismatch). The nonempty K > 0 host pair is NOT a killing test: there the late refusal follows a host malloc (no CUDA call) with the same message, so this mutant cannot be seen through it.",
+   "run": "CPU",
+   "killing_tests": [
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[int64-host_k0]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[int64-host_empty_out]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[int64-host_batched_k0]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[int64-cuda_k0]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[uint8-host_k0]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[uint8-host_empty_out]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[uint8-host_batched_k0]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[uint8-cuda_k0]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[bool-host_k0]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[bool-host_empty_out]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[bool-host_batched_k0]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[bool-cuda_k0]"
+   ]
+  },
+  "m07_byteorder": {
+   "file": "src/bindings.cpp",
+   "what": "numpy_dtype's byte-order check is dropped",
+   "old": "  if (!dt.attr(\"isnative\").cast<bool>())\n",
+   "new": "  std::fprintf(stderr, \"ENG4-MUTANT m07_byteorder executed\\n\"); std::fflush(stderr); \n  if (false)\n",
+   "order_source": "H4 m07 (H1)",
+   "named_assertion": "pytest.raises(TypeError, match='non-native byte order NumPy dtype <d>') -- 'DID NOT RAISE'",
+   "run": "CPU",
+   "killing_tests": [
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_byteorder_refuses[>f4-_C.tensor]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_byteorder_refuses[>f4-from_numpy]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_byteorder_refuses[>f2-_C.tensor]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_byteorder_refuses[>f2-from_numpy]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_byteorder_refuses[>i8-_C.tensor]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_byteorder_refuses[>i8-from_numpy]"
+   ]
+  },
+  "m08_k0_gemm": {
+   "file": "src/matmul.cu",
+   "what": "the forward's K = 0 early return is dropped (K = 0 reaches the GEMM with lda = 0)",
+   "old": "  if (plan.k == 0) return NDArray::zeros(plan.out_shape, a.dtype, a.device);\n",
+   "new": "  std::fprintf(stderr, \"ENG4-MUTANT m08_k0_gemm executed\\n\"); std::fflush(stderr); \n  if (false) return NDArray::zeros(plan.out_shape, a.dtype, a.device);\n",
+   "order_source": "H4 m08 (a staged GPU line; it must fail on the zero check)",
+   "named_assertion": "the zero check of test_gpu_zero_size_returns_numpy_result[<K0 cells>] (GPU line mut_m08): pytest.fail('zero check: ...') when the call raises (cuBLAS refuses lda = 0, now checked) or 'zero check: K = 0 must give positive zeros' if it returns unwritten memory. CPU part: the same zero check in test_h1_zero_size_returns_numpy_result[<K0 cells>] (no device: the GEMM path raises the CUDA error).",
+   "run": "CPU part + staged GPU line mut_m08",
+   "killing_tests": [
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[a_K0-float32]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[a_K0-float16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[a_K0-bfloat16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[a_K0_trans-float32]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[a_K0_trans-float16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[a_K0_trans-bfloat16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[b_K0-float32]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[b_K0-float16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[b_K0-bfloat16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[b_rank2_K0-float32]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[b_rank2_K0-float16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[b_rank2_K0-bfloat16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[c_K0-float32]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[c_K0-float16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[c_K0-bfloat16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[a_K0-float32]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[a_K0-float16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[a_K0-bfloat16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[a_K0_trans-float32]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[a_K0_trans-float16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[a_K0_trans-bfloat16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[b_K0-float32]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[b_K0-float16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[b_K0-bfloat16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[b_rank2_K0-float32]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[b_rank2_K0-float16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[b_rank2_K0-bfloat16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[c_K0-float32]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[c_K0-float16]",
+    "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[c_K0-bfloat16]"
+   ]
+  }
+ }
+}

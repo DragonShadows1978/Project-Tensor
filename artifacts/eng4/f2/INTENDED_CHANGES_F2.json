@@ -1,0 +1,51 @@
+{
+ "written_utc": "2026-11-23T14:54:24.058693+00:00",
+ "written_before": "J3's F2 after-run (CPU) and every F2 GPU line",
+ "suite_ids": {
+  "carried_from_ENG4": {
+   "ruling": "ENG4 M7 (stands, X5)",
+   "test_ids": [
+    "tensor_cuda/tests/test_bwd_r1_matmul.py::test_gpu_refuses_forward_first_batch_only[a_batch0-b_batch0]",
+    "tensor_cuda/tests/test_bwd_r1_matmul.py::test_gpu_refuses_forward_first_batch_only[a_batch1-b_batch1]",
+    "tensor_cuda/tests/test_bwd_r1_matmul.py::test_gpu_refuses_forward_first_batch_only[a_batch2-b_batch2]"
+   ],
+   "old_assertion": "output = tc.matmul(a, b) succeeds; pytest.raises(RuntimeError, match='forward uses stride 0 and only the first B matrix') around output.backward(); a.grad, b.grad and output.grad are None",
+   "new_assertion": "pytest.raises(RuntimeError, match=r'A \\[<A shape>\\].*B \\[<B shape>\\]') around tc.matmul(a, b); a.grad and b.grad are None (there is no output)",
+   "expected_outcome": {
+    "cpu": {
+     "B": "skipped",
+     "E": "skipped"
+    },
+    "gpu": {
+     "B": "passed",
+     "E": "passed"
+    }
+   }
+  },
+  "new_in_F2": [],
+  "prediction": "no other existing suite ID changes outcome: Y1 changes results only for leading extents whose plain product would overflow int64 (reachable only through a metadata reshape of a zero-element tensor); Y2 only for the backward of a batch-0 forward with a shared B; Y3 only when a CUDA zero fill fails. No existing test builds these (rg over the test trees for reshape of zeros(0) to huge extents and for batch-0 matmul backward: none)."
+ },
+ "behaviour_changes": [
+  {
+   "fix": "Y2",
+   "ruling": "order Y2: a raise becomes a zero gradient",
+   "pairs": "classes a and c at batch 0 with a shared, nonempty B: A (0,2,3) x B (3,4); A (0,2,3) x B (1,1,3,4); A (2,0,2,3) x B (3,4); A (0,3,2,3) x B (1,3,4); trans_b both ways; float32, float16, bfloat16",
+   "before": "ENG4-REV2's CPU witness on Build F1 (host float16/bfloat16): out.backward() raised 'reshape: element count mismatch' (CPU_WITNESSES.log lines 23-34); this seat's J1 run of the same tests on F1: 16 failures with that message. Build B on CUDA: recorded by the staged line bwd0_B before any claim.",
+   "after": "B.grad = positive zeros of B's shape and dtype; A.grad = A's empty gradient (J1 on CPU; bwd0_F2 on GPU)"
+  },
+  {
+   "fix": "Y1",
+   "ruling": "order Y1: refused before the product could overflow",
+   "cases": "nonzero leading extents whose product exceeds INT_MAX and whose int64 product would overflow: (2^32, 2^32), (2^16, 2^48), (3, 2^62), (2^31-1, 2^31-1, 4) with M = 0",
+   "before": "F1: the wrapped product passed the INT_MAX check and the forward stopped at the output byte bound (OverflowError 'NDArray: byte size overflows int64 ...'); 4 J1 failures on F1",
+   "after": "RuntimeError 'matmul refused: GEMM batch count above INT_MAX: the product of A's leading extents exceeds 2147483647 at leading dimension <d> (...)'"
+  }
+ ],
+ "g3_cells": "none: the GEMM block and every nonzero-size result are unchanged; zero-size cells are held to NumPy (as F1, whose K = 0 zeros now also pass Y3's fill check)",
+ "changed_test_file": {
+  "file": "tensor_cuda/tests/test_eng4_matmul.py (L38; excluded from the suite runs)",
+  "changes": [
+   "new: test_j1_y1_zero_leading_is_batch0, test_j1_y1_zero_leading_is_batch0_returns_empty, test_j1_y1_refuses_before_overflow, test_j1_y1_batchcount_boundary, test_j1_y2_empty_batch_shared_b_zero_gradient, test_gpu_bwd0_zero_gradient; no existing test in the file changed"
+  ]
+ }
+}

@@ -1,0 +1,12 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng4/tensor_cuda/src/matmul.cu	2026-11-23 08:56:32.842828976 -0500
++++ /tmp/eng4_src_m06_dtype_after_alloc/tensor_cuda/src/matmul.cu	2026-11-23 08:57:00.053869777 -0500
+@@ -70,7 +70,8 @@
+                   trans_b);
+   // ENG4-F1 X1 (ENG4R1-F01): the GEMM below supports these three dtypes only. The check sits here, before the
+   // forward allocates its output (a CUDA allocation for CUDA operands), instead of in the dispatch's final else.
+-  if (a.dtype != DType::Float32 && a.dtype != DType::Float16 && a.dtype != DType::BFloat16)
++  std::fprintf(stderr, "ENG4-MUTANT m06_dtype_after_alloc executed\n"); std::fflush(stderr); 
++  if (false)
+     return refuse(p, MatmulOperandIssue::UnsupportedDtype, std::string("operand dtype ") + dtype_name(a.dtype), a,
+                   b, trans_b);
+   // trans_b: C = alpha * A @ B^T with B stored row-major (N, K).

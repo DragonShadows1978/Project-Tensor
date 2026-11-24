@@ -1,0 +1,538 @@
+{
+ "written_utc": "2026-11-23T14:19:35.759768+00:00",
+ "order": "orders/ENG4_F1_REV1_FIXES.md H5",
+ "cwd": "the worktree root",
+ "order_form": "forge-gpu-run --min <s> --max 540 --label eng4f1-<line> -- timeout <=500s ...",
+ "run_each_with": "python3 -B -P scripts/eng4_f1_gpu_line.py run <line>",
+ "scope": "the lead runs each line in a systemd scope with MemoryMax=12G and OOMPolicy=continue; no line sets RLIMIT_AS / ulimit -v / prlimit",
+ "prerequisite": "g3_F1's compare needs the lead's ENG4 line g3_B (artifacts/eng4/gpu/g3_B/g3)",
+ "order_of_runs": "any; g4_<arm>_NN lines of one arm in number order (each continues its series); a g4 line whose series is complete exits 0 at once; if g4_<arm>_10 ends incomplete, rerun the same command after moving its write-once directory aside",
+ "after_lines_cpu": [
+  "python3 -B -P scripts/eng4_f1_g3_compare.py artifacts/eng4/gpu/g3_B/g3 artifacts/eng4/f1/gpu/g3_F1/g3 artifacts/eng4/f1/G3_F1_COMPARE.json",
+  "python3 -B -P scripts/eng4_f1_g4_compare.py f1gpu_B f1gpu_F1 artifacts/eng4/f1/H3_GPU_COMPARE.json",
+  "python3 -B -P scripts/eng4_f1_mutant_results.py gpu"
+ ],
+ "lines": [
+  {
+   "line": "g2_F1",
+   "description": "H5 g2_F1: sanitizer preflight + ENG-MM1 under memcheck (refusal, 0 errors)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g2_F1",
+   "forge_command": "forge-gpu-run --min 240 --max 540 --label eng4f1-g2_F1 -- timeout 480s python3 -B -P scripts/eng4_f1_gpu_line.py step g2_F1",
+   "min_s": 240,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g2_F1/"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g2_F1.json"
+  },
+  {
+   "line": "g3_F1",
+   "description": "H5 g3_F1: the seeded G3 grid on F1 (eng4_g3.py run, unchanged)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g3_F1",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng4f1-g3_F1 -- timeout 480s python3 -B -P scripts/eng4_f1_gpu_line.py step g3_F1",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g3_F1/"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g3_F1.json"
+  },
+  {
+   "line": "boundary_F1",
+   "description": "H5 boundary_F1: every refusal class with CUDA operands",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run boundary_F1",
+   "forge_command": "forge-gpu-run --min 180 --max 540 --label eng4f1-boundary_F1 -- timeout 480s python3 -B -P scripts/eng4_f1_gpu_line.py step boundary_F1",
+   "min_s": 180,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/boundary_F1/"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/boundary_F1.json"
+  },
+  {
+   "line": "own_F1",
+   "description": "H5 own_F1: tensor_cuda/tests/test_eng4_matmul.py with the GPU visible",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run own_F1",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng4f1-own_F1 -- timeout 480s python3 -B -P scripts/eng4_f1_gpu_line.py step own_F1",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/own_F1/",
+    "/tmp/eng4_tmp/pt/<label>_<i>/ (pytest basetemp per test)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/own_F1.json"
+  },
+  {
+   "line": "mut_m02_f1",
+   "description": "H4 m02_f1 GPU part: the mixed-device GPU tests, one process each",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run mut_m02_f1",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng4f1-mut_m02_f1 -- timeout 480s python3 -B -P scripts/eng4_f1_gpu_line.py step mut_m02_f1",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "m02_f1": "e0e4381ed515d5647285d1f93a6a5f3abdd3b408212ec195ceb41cc03474041c"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/mut_m02_f1/",
+    "/tmp/eng4_tmp/pt/<label>_<i>/ (pytest basetemp per test)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/mut_m02_f1.json"
+  },
+  {
+   "line": "mut_m08",
+   "description": "H4 m08 GPU line: the K = 0 GPU zero checks, one process each",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run mut_m08",
+   "forge_command": "forge-gpu-run --min 180 --max 540 --label eng4f1-mut_m08 -- timeout 480s python3 -B -P scripts/eng4_f1_gpu_line.py step mut_m08",
+   "min_s": 180,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "m08_k0_gemm": "3b78368f74ea358b4737b1a6d9751832fd8fd282dc1a658d7d5b3e050b02e3d2"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/mut_m08/",
+    "/tmp/eng4_tmp/pt/<label>_<i>/ (pytest basetemp per test)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/mut_m08.json"
+  },
+  {
+   "line": "g4_B_01",
+   "description": "H5 G4 GPU half, Build B, part 1 (series f1gpu_B; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_B_01",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_B_01 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_B_01",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "20881ace0ef7f3fd1feb324f1f75a63589d523d0f943857de7564c5f0e297c40",
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_B_01/",
+    "artifacts/eng4/f1/g4/f1gpu_B/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_B_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_B_01.json"
+  },
+  {
+   "line": "g4_B_02",
+   "description": "H5 G4 GPU half, Build B, part 2 (series f1gpu_B; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_B_02",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_B_02 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_B_02",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "20881ace0ef7f3fd1feb324f1f75a63589d523d0f943857de7564c5f0e297c40",
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_B_02/",
+    "artifacts/eng4/f1/g4/f1gpu_B/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_B_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_B_02.json"
+  },
+  {
+   "line": "g4_B_03",
+   "description": "H5 G4 GPU half, Build B, part 3 (series f1gpu_B; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_B_03",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_B_03 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_B_03",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "20881ace0ef7f3fd1feb324f1f75a63589d523d0f943857de7564c5f0e297c40",
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_B_03/",
+    "artifacts/eng4/f1/g4/f1gpu_B/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_B_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_B_03.json"
+  },
+  {
+   "line": "g4_B_04",
+   "description": "H5 G4 GPU half, Build B, part 4 (series f1gpu_B; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_B_04",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_B_04 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_B_04",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "20881ace0ef7f3fd1feb324f1f75a63589d523d0f943857de7564c5f0e297c40",
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_B_04/",
+    "artifacts/eng4/f1/g4/f1gpu_B/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_B_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_B_04.json"
+  },
+  {
+   "line": "g4_B_05",
+   "description": "H5 G4 GPU half, Build B, part 5 (series f1gpu_B; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_B_05",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_B_05 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_B_05",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "20881ace0ef7f3fd1feb324f1f75a63589d523d0f943857de7564c5f0e297c40",
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_B_05/",
+    "artifacts/eng4/f1/g4/f1gpu_B/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_B_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_B_05.json"
+  },
+  {
+   "line": "g4_B_06",
+   "description": "H5 G4 GPU half, Build B, part 6 (series f1gpu_B; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_B_06",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_B_06 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_B_06",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "20881ace0ef7f3fd1feb324f1f75a63589d523d0f943857de7564c5f0e297c40",
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_B_06/",
+    "artifacts/eng4/f1/g4/f1gpu_B/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_B_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_B_06.json"
+  },
+  {
+   "line": "g4_B_07",
+   "description": "H5 G4 GPU half, Build B, part 7 (series f1gpu_B; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_B_07",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_B_07 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_B_07",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "20881ace0ef7f3fd1feb324f1f75a63589d523d0f943857de7564c5f0e297c40",
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_B_07/",
+    "artifacts/eng4/f1/g4/f1gpu_B/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_B_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_B_07.json"
+  },
+  {
+   "line": "g4_B_08",
+   "description": "H5 G4 GPU half, Build B, part 8 (series f1gpu_B; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_B_08",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_B_08 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_B_08",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "20881ace0ef7f3fd1feb324f1f75a63589d523d0f943857de7564c5f0e297c40",
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_B_08/",
+    "artifacts/eng4/f1/g4/f1gpu_B/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_B_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_B_08.json"
+  },
+  {
+   "line": "g4_B_09",
+   "description": "H5 G4 GPU half, Build B, part 9 (series f1gpu_B; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_B_09",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_B_09 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_B_09",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "20881ace0ef7f3fd1feb324f1f75a63589d523d0f943857de7564c5f0e297c40",
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_B_09/",
+    "artifacts/eng4/f1/g4/f1gpu_B/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_B_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_B_09.json"
+  },
+  {
+   "line": "g4_B_10",
+   "description": "H5 G4 GPU half, Build B, part 10 (series f1gpu_B; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_B_10",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_B_10 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_B_10",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "B": "20881ace0ef7f3fd1feb324f1f75a63589d523d0f943857de7564c5f0e297c40",
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_B_10/",
+    "artifacts/eng4/f1/g4/f1gpu_B/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_B_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_B_10.json"
+  },
+  {
+   "line": "g4_F1_01",
+   "description": "H5 G4 GPU half, Build F1, part 1 (series f1gpu_F1; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_F1_01",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_F1_01 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_F1_01",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_F1_01/",
+    "artifacts/eng4/f1/g4/f1gpu_F1/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_F1_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_F1_01.json"
+  },
+  {
+   "line": "g4_F1_02",
+   "description": "H5 G4 GPU half, Build F1, part 2 (series f1gpu_F1; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_F1_02",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_F1_02 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_F1_02",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_F1_02/",
+    "artifacts/eng4/f1/g4/f1gpu_F1/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_F1_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_F1_02.json"
+  },
+  {
+   "line": "g4_F1_03",
+   "description": "H5 G4 GPU half, Build F1, part 3 (series f1gpu_F1; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_F1_03",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_F1_03 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_F1_03",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_F1_03/",
+    "artifacts/eng4/f1/g4/f1gpu_F1/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_F1_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_F1_03.json"
+  },
+  {
+   "line": "g4_F1_04",
+   "description": "H5 G4 GPU half, Build F1, part 4 (series f1gpu_F1; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_F1_04",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_F1_04 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_F1_04",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_F1_04/",
+    "artifacts/eng4/f1/g4/f1gpu_F1/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_F1_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_F1_04.json"
+  },
+  {
+   "line": "g4_F1_05",
+   "description": "H5 G4 GPU half, Build F1, part 5 (series f1gpu_F1; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_F1_05",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_F1_05 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_F1_05",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_F1_05/",
+    "artifacts/eng4/f1/g4/f1gpu_F1/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_F1_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_F1_05.json"
+  },
+  {
+   "line": "g4_F1_06",
+   "description": "H5 G4 GPU half, Build F1, part 6 (series f1gpu_F1; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_F1_06",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_F1_06 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_F1_06",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_F1_06/",
+    "artifacts/eng4/f1/g4/f1gpu_F1/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_F1_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_F1_06.json"
+  },
+  {
+   "line": "g4_F1_07",
+   "description": "H5 G4 GPU half, Build F1, part 7 (series f1gpu_F1; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_F1_07",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_F1_07 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_F1_07",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_F1_07/",
+    "artifacts/eng4/f1/g4/f1gpu_F1/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_F1_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_F1_07.json"
+  },
+  {
+   "line": "g4_F1_08",
+   "description": "H5 G4 GPU half, Build F1, part 8 (series f1gpu_F1; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_F1_08",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_F1_08 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_F1_08",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_F1_08/",
+    "artifacts/eng4/f1/g4/f1gpu_F1/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_F1_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_F1_08.json"
+  },
+  {
+   "line": "g4_F1_09",
+   "description": "H5 G4 GPU half, Build F1, part 9 (series f1gpu_F1; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_F1_09",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_F1_09 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_F1_09",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_F1_09/",
+    "artifacts/eng4/f1/g4/f1gpu_F1/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_F1_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_F1_09.json"
+  },
+  {
+   "line": "g4_F1_10",
+   "description": "H5 G4 GPU half, Build F1, part 10 (series f1gpu_F1; exits at once when the series is complete)",
+   "lead_command": "python3 -B -P scripts/eng4_f1_gpu_line.py run g4_F1_10",
+   "forge_command": "forge-gpu-run --min 480 --max 540 --label eng4f1-g4_F1_10 -- timeout 500s python3 -B -P scripts/eng4_f1_gpu_line.py step g4_F1_10",
+   "min_s": 480,
+   "max_s": 540,
+   "inner_timeout_s": 500,
+   "modules": {
+    "F1": "7b80c6dca52e380a5aa2f082c00f2951f23dfe4b7b798fab6c4cde1c683817b0"
+   },
+   "expected_peak_host_bytes": 6442450944,
+   "write_once_paths": [
+    "artifacts/eng4/f1/gpu/g4_F1_10/",
+    "artifacts/eng4/f1/g4/f1gpu_F1/part_<n>/ (n = parts so far + 1)",
+    "/tmp/eng4_tmp/pt/f1gpu_F1_<n>/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f1/gpu_dry/g4_F1_10.json"
+  }
+ ]
+}

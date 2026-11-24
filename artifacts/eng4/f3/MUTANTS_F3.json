@@ -1,0 +1,21 @@
+{
+ "written_utc": "2026-11-23T15:33:29.232521+00:00",
+ "base": {
+  "tree": "Build F3 sources",
+  "matmul.cu": "943e03f0ed3ec6c6fdb3ca85cab808d69ec46ec0df0eea7cc071ce67535d20e7"
+ },
+ "mutants": {
+  "m11_f3_status_ignored": {
+   "file": "src/matmul.cu",
+   "old": "    if (status != cudaSuccess)\n      throw std::runtime_error(std::string(where) + \": cudaMemset failed: \" + cudaGetErrorName(status) + \": \" +\n                               cudaGetErrorString(status));\n",
+   "new": "    std::fprintf(stderr, \"ENG4-MUTANT m11_f3_status_ignored executed\\n\"); std::fflush(stderr);\n    if (false && status != cudaSuccess)\n      throw std::runtime_error(std::string(where) + \": cudaMemset failed: \" + cudaGetErrorName(status) + \": \" +\n                               cudaGetErrorString(status));\n",
+   "arm": "build-eng4/m11_f3",
+   "what": "zeros_checked ignores cudaMemset's returned status (order K5)",
+   "order_source": "K5: it can fail only if a fill can be made to fail; if no test can see it, record it as unkillable by test, with the reason",
+   "killing_tests": [],
+   "registered_as": "UNKILLABLE BY TEST",
+   "reason": "The mutant differs from F3 only when cudaMemset returns a non-success status on the fill of an allocation the helper has just made. A non-sticky error from an earlier call is not returned by a later, successful cudaMemset (the CUDA runtime reports it through the last-error slot, which neither F3 nor the mutant reads: the K4 witness therefore returns zeros on both). cudaMemset on a valid fresh allocation fails only under a sticky context error (a device fault such as an illegal address, or a lost device). No public TensorCUDA call in this round's census produces one without a memory-unsafe operation (ENG4's predicate exists to refuse those), and making the context fail on purpose on the shared GPU is outside this order (no GPU use; the lead's lines run inside GRAPA's cooldowns). Reading: matmul.cu zeros_checked (the only status branch) and kernels.cu Storage::Storage (the allocation succeeded before the fill).",
+   "run": "built and run against the CPU test file (expected: every test passes, i.e. survives), and against own_F3's GPU tests only if the lead chooses; no GPU line is registered to kill it"
+  }
+ }
+}

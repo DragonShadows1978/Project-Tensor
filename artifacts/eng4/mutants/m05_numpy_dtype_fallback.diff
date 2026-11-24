@@ -1,0 +1,10 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng4/tensor_cuda/src/bindings.cpp	2026-11-23 07:45:44.727574677 -0500
++++ /tmp/eng4_src_m05_numpy_dtype_fallback/tensor_cuda/src/bindings.cpp	2026-11-23 07:55:48.822765742 -0500
+@@ -86,6 +86,7 @@
+   // the factories cast to a listed dtype before this call; tensor_cuda.from_numpy and direct _C.tensor callers do
+   // not. Prior art: NumPy's own TypeError for an unknown dtype and ENG2 F1's Python-side refusal (__init__.py
+   // _np_dtype, this repo); ours: the refusal at the C++ entry.
++  std::fprintf(stderr, "ENG4-MUTANT m05_numpy_dtype_fallback executed\n"); std::fflush(stderr); return DType::Float32;
+   throw py::type_error("tensor: unsupported NumPy dtype " + py::str(py::object(dt)).cast<std::string>() +
+                        " (kind '" + std::string(1, dt.kind()) + "', itemsize " + std::to_string(dt.itemsize()) +
+                        "); supported: float32, float16, int64, uint8, bool");

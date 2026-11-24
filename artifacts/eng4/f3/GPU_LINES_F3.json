@@ -1,0 +1,70 @@
+{
+ "written_utc": "2026-11-23T15:48:26.233032+00:00",
+ "order": "orders/ENG4_F3_REV3_FILL_STATUS.md K6",
+ "cwd": "this worktree's root (tensor_fork_apa_wt_eng4f3)",
+ "run_each_with": "python3 -B -P scripts/eng4_f3_gpu_line.py run <line>",
+ "scope": "the lead runs each line in a systemd scope with MemoryMax=12G and OOMPolicy=continue; no line sets RLIMIT_AS / ulimit -v / prlimit; no line runs compute-sanitizer",
+ "L58_guard": "step refuses (exit 7) unless forge-gpu-run is an ancestor process; only then does it remove CUDA_VISIBLE_DEVICES from its children's environment",
+ "after_lines_cpu": [
+  "python3 -B -P scripts/eng4_f3_g3z.py verdict artifacts/eng4/f3/gpu/g3z_F3/g3z",
+  "python3 -B -P scripts/eng4_f3_pending.py verdict artifacts/eng4/f3/gpu/pending_F2_F3/pending"
+ ],
+ "lines": [
+  {
+   "line": "own_F3",
+   "description": "K6 own_F3: tensor_cuda/tests/test_eng4_matmul.py with the GPU visible",
+   "lead_command": "python3 -B -P scripts/eng4_f3_gpu_line.py run own_F3",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng4f3-own_F3 -- timeout 480s python3 -B -P scripts/eng4_f3_gpu_line.py step own_F3",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "F3": "f005d765e3aed86b537c9660bea4a2bfffc86a121d724c6d7086ec399baeae96"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng4/f3/gpu/own_F3/",
+    "/tmp/eng4f3_tmp/pt/own_F3_0/ (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f3/gpu_dry/own_F3.json"
+  },
+  {
+   "line": "g3z_F3",
+   "description": "K6 g3z_F3: G3 zero-size cells + 24 empty-batch gradients vs NumPy/zeros",
+   "lead_command": "python3 -B -P scripts/eng4_f3_gpu_line.py run g3z_F3",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng4f3-g3z_F3 -- timeout 480s python3 -B -P scripts/eng4_f3_gpu_line.py step g3z_F3",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "F3": "f005d765e3aed86b537c9660bea4a2bfffc86a121d724c6d7086ec399baeae96"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng4/f3/gpu/g3z_F3/"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f3/gpu_dry/g3z_F3.json"
+  },
+  {
+   "line": "pending_F2_F3",
+   "description": "K4 witness: a pending allocation error, then the zero fills, on F2 and F3 (4 child processes)",
+   "lead_command": "python3 -B -P scripts/eng4_f3_gpu_line.py run pending_F2_F3",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng4f3-pending_F2_F3 -- timeout 480s python3 -B -P scripts/eng4_f3_gpu_line.py step pending_F2_F3",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "modules": {
+    "F2": "c913e8d9e1eff88e6cbc0f68f6f2d03076baa022cc6addd92843215dea7fbd32",
+    "F3": "f005d765e3aed86b537c9660bea4a2bfffc86a121d724c6d7086ec399baeae96"
+   },
+   "expected_peak_host_bytes": 3221225472,
+   "write_once_paths": [
+    "artifacts/eng4/f3/gpu/pending_F2_F3/"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng4/f3/gpu_dry/pending_F2_F3.json"
+  }
+ ]
+}

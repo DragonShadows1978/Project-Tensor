@@ -157,10 +157,12 @@ def test_gpu_lower_precision_fallback(dtype):
 def test_gpu_refuses_forward_first_batch_only(a_batch, b_batch):
     a = tc.tensor(np.ones((*a_batch, 2, 3)), requires_grad=True)
     b = tc.tensor(np.ones((*b_batch, 3, 4)), requires_grad=True)
-    output = tc.matmul(a, b)
-    with pytest.raises(RuntimeError, match="forward uses stride 0 and only the first B matrix"):
-        output.backward()
-    assert a.grad is None and b.grad is None and output.grad is None
+    # ENG4 M7: the forward now refuses these operands before any CUDA call (M3), naming both shapes, so no output
+    # and no gradient exist. Before ENG4 the forward used only B's first matrix and the backward refused.
+    with pytest.raises(RuntimeError, match=r"A \[" + ", ".join(map(str, (*a_batch, 2, 3))) + r"\].*B \["
+                       + ", ".join(map(str, (*b_batch, 3, 4))) + r"\]"):
+        tc.matmul(a, b)
+    assert a.grad is None and b.grad is None
 
 
 @pytest.mark.parametrize("trans_b", [False, True])

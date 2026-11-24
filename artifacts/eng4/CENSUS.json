@@ -1,0 +1,1871 @@
+{
+ "order": "orders/ENG4_MATMUL_CONTRACT.md M1, N1, L90",
+ "classes": {
+  "a": "B rank 2 (B stride 0; rank 2 x rank 2 keeps the old stride K*N with batch 1)",
+  "b": "equal ranks, equal batch shapes (B stride K*N)",
+  "c": "unequal ranks, B rank > 2, every leading B extent 1 (B stride 0)",
+  "refused": "every other pair (M3), different devices, M/N/K or batch above INT_MAX (M4)"
+ },
+ "role_counts": {
+  "product": 23,
+  "test_direct": 31,
+  "consumer_sites": {
+   "Project-Voice/engine": 23,
+   "GRAPA-Native-LLM": 138
+  },
+  "consumer_tensorcuda_sites": {
+   "Project-Voice/engine": 7,
+   "GRAPA-Native-LLM": 50
+  },
+  "consumer_artifact_copy_sites": {
+   "Project-Voice/engine": 0,
+   "GRAPA-Native-LLM": 472
+  },
+  "harness": "n/a"
+ },
+ "product": [
+  {
+   "site_build_B": "tensor_cuda/src/bindings.cpp:2075",
+   "lines_in_build_E": [
+    2082
+   ],
+   "code": "m.def(\"matmul\", &ops::matmul, py::arg(\"a\"), py::arg(\"b\"),",
+   "ranks_class": "dynamic (caller's operands)",
+   "note": "Python _C.matmul -> ops::matmul (ops.cpp) -> tc::matmul"
+  },
+  {
+   "site_build_B": "tensor_cuda/src/bindings.cpp:2050",
+   "lines_in_build_E": [
+    2057
+   ],
+   "code": ".def(\"__matmul__\", [](Tensor& a, Tensor& b) { return ops::matmul(a, b); })",
+   "ranks_class": "dynamic (caller's operands)",
+   "note": "Tensor @ Tensor -> ops::matmul(a, b) -> tc::matmul"
+  },
+  {
+   "site_build_B": "tensor_cuda/src/ops.cpp:826",
+   "lines_in_build_E": [
+    832
+   ],
+   "code": "NDArray out = tc::matmul(a.data(), b.data(), alpha, trans_b);",
+   "ranks_class": "dynamic",
+   "note": "ops::matmul (autograd op): the forward call every Python path takes"
+  },
+  {
+   "site_build_B": "tensor_cuda/src/ops.cpp:785",
+   "lines_in_build_E": [
+    785
+   ],
+   "code": "if (a.dtype != DType::Float32) return tc::matmul(a, b, alpha, trans_b);",
+   "ranks_class": "a or b (backward operands: g with A's batch shape and B or its rank-2 view; A^T/g pairs share A's batch)",
+   "note": "matmul_backward's lower-precision path; operands built by the Tensor matmul closure"
+  },
+  {
+   "site_build_B": "tensor_cuda/src/ops.cpp:864",
+   "lines_in_build_E": [
+    873,
+    912
+   ],
+   "code": "x.v->accumulate_grad(tc::matmul(g, w_kn, 1.f, /*trans_b=*/true));",
+   "ranks_class": "class a (w_kn rank 2, (K,N))",
+   "note": "int4 linear backward"
+  },
+  {
+   "site_build_B": "tensor_cuda/src/ops.cpp:903",
+   "lines_in_build_E": [
+    873,
+    912
+   ],
+   "code": "x.v->accumulate_grad(tc::matmul(g, w_kn, 1.f, /*trans_b=*/true));",
+   "ranks_class": "class a (w_kn rank 2)",
+   "note": "intn linear backward"
+  },
+  {
+   "site_build_B": "tensor_cuda/src/kernels.cu:4336",
+   "lines_in_build_E": [
+    4336,
+    4818
+   ],
+   "code": "return matmul(x, w_kn);",
+   "ranks_class": "class a (w_kn rank 2); x rank >= 1 (rank 1 refused by the pre-existing rank check)",
+   "note": "int4_linear"
+  },
+  {
+   "site_build_B": "tensor_cuda/src/kernels.cu:4818",
+   "lines_in_build_E": [
+    4336,
+    4818
+   ],
+   "code": "return matmul(x, w_kn);",
+   "ranks_class": "class a (w_kn rank 2)",
+   "note": "intn_linear"
+  },
+  {
+   "site_build_B": "tensor_cuda/src/gemm_apa.cu:779",
+   "lines_in_build_E": [
+    779
+   ],
+   "code": "NDArray outg = matmul(pg, v, 1.f, false);",
+   "ranks_class": "class b: pg [B,KVH,M,S] and v [B,KVH,S,VD], both rank 4; validate() (gemm_apa.cu:75-98) fixes v's B and KVH",
+   "note": "APA SB2 selective attention P@V"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/__init__.py:343",
+   "lines_in_build_E": [
+    343
+   ],
+   "code": "return _C.matmul(a, b, alpha, trans_b)",
+   "ranks_class": "dynamic",
+   "note": "public tc.matmul"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/nn.py:107",
+   "lines_in_build_E": [
+    107
+   ],
+   "code": "out = tc.matmul(x, w, trans_b=True)",
+   "ranks_class": "class a (weight rank 2: (out, in)); x any rank >= 2",
+   "note": "nn.Linear"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/nn.py:386",
+   "lines_in_build_E": [
+    386
+   ],
+   "code": "out = tc.matmul(cols.transpose(1, 2), W2.transpose(0, 1))  # (N, L, out)",
+   "ranks_class": "class a (rank 3 cols x rank 2 W2)",
+   "note": "nn.Conv2D (im2col)"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/nn.py:448",
+   "lines_in_build_E": [
+    448
+   ],
+   "code": "oc = tc.matmul(x2, Wt).transpose(1, 2)                 # (N, Cout*kh*kw, HW)",
+   "ranks_class": "class a (rank 3 x rank 2)",
+   "note": "nn.ConvTranspose2D"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/functional.py:171",
+   "lines_in_build_E": [
+    171
+   ],
+   "code": "scores = tc.matmul(query, key, alpha=scale, trans_b=True)",
+   "ranks_class": "dynamic; documented (B,H,L,D) for q/k/v -> class b when the caller follows it (no GQA: callers repeat KV)",
+   "note": "scaled_dot_product_attention QK^T"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/functional.py:177",
+   "lines_in_build_E": [
+    177
+   ],
+   "code": "return tc.matmul(_guarded_softmax(scores, tc.causal_softmax,",
+   "ranks_class": "class b if q/k/v share (B,H) (scores carry q's batch)",
+   "note": "SDPA fused-softmax path P@V"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/functional.py:200",
+   "lines_in_build_E": [
+    200
+   ],
+   "code": "return tc.matmul(weights, value)",
+   "ranks_class": "class b if q/k/v share (B,H)",
+   "note": "SDPA P@V"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/quant.py:125",
+   "lines_in_build_E": [
+    125
+   ],
+   "code": "rotated = tc.matmul(unit, Rb.transpose(-2, -1))",
+   "ranks_class": "class b: unit (B,H,S,D) unpacked rank 4; Rb expanded to [B,H,D,D]",
+   "note": "_quantize_keys rotate"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/quant.py:127",
+   "lines_in_build_E": [
+    127
+   ],
+   "code": "recon = tc.matmul(centroids, Rb) * norms",
+   "ranks_class": "class b ([B,H,S,D] x [B,H,D,D])",
+   "note": "_quantize_keys rotate back"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/quant.py:248",
+   "lines_in_build_E": [
+    248
+   ],
+   "code": "bulk32 = tc.matmul(qf, kqf, alpha=scale, trans_b=True)",
+   "ranks_class": "rank 4 x rank 4 (qf unpacked B,H,L,_); class b if the caller's key shares (B,H)",
+   "note": "_definition_selection"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/quant.py:291",
+   "lines_in_build_E": [
+    291
+   ],
+   "code": "bulk = tc.matmul(query, key_quant, alpha=scale, trans_b=True)",
+   "ranks_class": "rank 4 x rank 4 (query unpacked; key_quant from _quantize_keys of key); class b if key shares (B,H)",
+   "note": "apa_quant_attention bulk"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/quant.py:292",
+   "lines_in_build_E": [
+    292
+   ],
+   "code": "ranking = tc.matmul(query, key, alpha=scale, trans_b=True)",
+   "ranks_class": "rank 4 x dynamic; class b if key shares (B,H) (documented (B,H,L,D))",
+   "note": "apa_quant_attention ranking"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/quant.py:331",
+   "lines_in_build_E": [
+    331
+   ],
+   "code": "return tc.matmul(weights, value)",
+   "ranks_class": "class b if value shares (B,H)",
+   "note": "apa_quant_attention P@V"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/apa_packed.py:389",
+   "lines_in_build_E": [
+    389
+   ],
+   "code": "return (tc.matmul(cent, Rb) * norm).detach()",
+   "ranks_class": "class b: cent (B,KV,S,D) built here; Rb expanded to [B,KV,D,D]",
+   "note": "PackedSpKeys._dense_reconstruction"
+  }
+ ],
+ "product_refused": [],
+ "product_verdict": "no product call path fixes a refused combination; the dynamic entries (tc.matmul, Tensor @, ops::matmul) accept what their callers pass, and every caller that fixes ranks passes class a or b",
+ "tests_direct": [
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_2_n2.py:97",
+   "code": "b32 = tc.matmul(qt, kt, alpha=1.0, trans_b=True)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_2_n2.py:129",
+   "code": "bulk32 = tc.matmul(qf, kqf, alpha=scale, trans_b=True)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:78",
+   "code": "bulk = tc.matmul(qt, kt, trans_b=True).numpy()",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:93",
+   "code": "bulk = tc.matmul(qt, kq, trans_b=True)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_2c_longkeys.py:114",
+   "code": "bulk32 = tc.matmul(qf, kqf, alpha=scale, trans_b=True)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_bwd_r1_core.py:24",
+   "code": "return tc.matmul(*xs, **attrs)",
+   "ranks_class": "via oracle Cases: small() plain/trans rank 2 x 2; batch_shared (2,2,3,5) x (5,4) class a; batched (2,2,..) x (2,2,..) class b; kokoro rank 2 x 2; strided canary (2,128,128) x (2,128,128) class b; TF32 canaries rank 2"
+  },
+  {
+   "site": "tensor_cuda/tests/test_eng4_matmul.py:100",
+   "code": "tc.matmul(a, b, trans_b=tb)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_eng4_matmul.py:111",
+   "code": "tc.matmul(a, b, trans_b=tb)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_eng4_matmul.py:122",
+   "code": "tc.matmul(a, b)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_eng4_matmul.py:132",
+   "code": "tc.matmul(a, b, trans_b=tb)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_eng4_matmul.py:178",
+   "code": "tc.matmul(a, b, trans_b=tb)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_eng4_matmul.py:192",
+   "code": "tc.matmul(a, b)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_om135_imm.py:157",
+   "code": "good = tc.matmul(ts[0], ts[1])",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_om135_imm.py:158",
+   "code": "bad = tc.matmul(ts[0], ts[1], trans_b=True)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_apa_mf2_1_gaps.py:50",
+   "code": "s = tc.matmul(q, k, alpha=1.0, trans_b=True).float().numpy()[0, 0]",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/bench_w8a16_k0b.py:82",
+   "code": "fp16_ms, fp16_samples = _median_ms(lambda: tc.matmul(x, w_kn))",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_engine.py:36",
+   "code": "out = tc.matmul(tc.tensor(A), tc.tensor(B))",
+   "ranks_class": "rank 2 x rank 2"
+  },
+  {
+   "site": "tensor_cuda/tests/test_engine.py:43",
+   "code": "out = tc.matmul(tc.tensor(A), tc.tensor(B))",
+   "ranks_class": "rank 2 x 2"
+  },
+  {
+   "site": "tensor_cuda/tests/test_engine.py:79",
+   "code": "pred = tc.matmul(x, w).gelu()",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_engine.py:87",
+   "code": "pred = tc.matmul(tc.tensor(X), w).gelu()",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_engine.py:94",
+   "code": "p = tc.matmul(tc.tensor(X), wv).gelu()",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_engine.py:112",
+   "code": "pred = tc.matmul(tc.tensor(X), W)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_bwd_r1_matmul.py:147",
+   "code": "tc.matmul(a, b).backward()",
+   "ranks_class": "rank 2 x rank 2 (class b, empty batch)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_bwd_r1_matmul.py:164",
+   "code": "tc.matmul(a, b)",
+   "ranks_class": "REFUSED by M3 (M7 test, changed): A (2,3)|(2,1,2,3)|(2,2,3) x B (2,3,4)|(2,3,4)|(1,2,3,4)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_bwd_r1_matmul.py:181",
+   "code": "(tc.matmul(a_dev, b_dev, trans_b=trans_b) * tc.tensor(g)).sum().backward()",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/bench_wo1a_sdpa.py:96",
+   "code": "scores = tc.matmul(q, k, alpha=scale, trans_b=True)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/bench_wo1a_sdpa.py:106",
+   "code": "out = tc.matmul(weights, v)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:104",
+   "code": "ref = tc.matmul(x_t, w_kn_t).numpy()",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:230",
+   "code": "y_ref = tc.matmul(x_t, w_kn_t)",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:279",
+   "code": "fp16_ms = _median_ms(lambda: tc.matmul(x_t, w_kn_t))",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  },
+  {
+   "site": "tensor_cuda/tests/test_w8a16_matmul.py:335",
+   "code": "ref = tc.matmul(",
+   "ranks_class": "dynamic or rank 2 (no batch dimension fixed at the site; reaches the forward as a product call)"
+  }
+ ],
+ "tests_with_batch_dimensions": [
+  {
+   "site": "tensor_cuda/tests/test_bwd_r1_core.py:24",
+   "code": "return tc.matmul(*xs, **attrs)",
+   "ranks_class": "via oracle Cases: small() plain/trans rank 2 x 2; batch_shared (2,2,3,5) x (5,4) class a; batched (2,2,..) x (2,2,..) class b; kokoro rank 2 x 2; strided canary (2,128,128) x (2,128,128) class b; TF32 canaries rank 2"
+  },
+  {
+   "site": "tensor_cuda/tests/test_bwd_r1_matmul.py:164",
+   "code": "tc.matmul(a, b)",
+   "ranks_class": "REFUSED by M3 (M7 test, changed): A (2,3)|(2,1,2,3)|(2,2,3) x B (2,3,4)|(2,3,4)|(1,2,3,4)"
+  }
+ ],
+ "tests_indirect": "tests of nn.Linear/Conv2D/ConvTranspose2D (class a), SDPA, apa_quant_attention, PackedSpKeys, gemm_apa selective attention (class b with documented equal (B,H)), int4/intn linear (class a); per-ID outcomes are G4's evidence",
+ "consumers": {
+  "Project-Voice/engine": [
+   {
+    "site": "Project-Voice/engine/kokoro_tc/stages.py:154",
+    "code": "# The port applies the alignment as a gather; check it equals d @ aln evaluated in float64.",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/stages.py:156",
+    "code": "en_ref = d64 @ ora.astype(np.float64)[None]",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/tensor_requests/p1t_tests/oracles.py:129",
+    "code": "z = Wd @ xt + Rd @ h + Wb + Rb",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/tests/test_grad.py:819",
+    "code": "ad = float(g_sd @ d)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "Project-Voice/engine/tensor_requests/p1t_tests/adapters/mutants/_lstm_fp32.py:55",
+    "code": "z = XP[t, b] + Rd @ hin + Wb + Rb",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/tools/register.py:133",
+    "code": "'\"/N_proj/Conv_output_0\", asr = \"/MatMul_1_output_0\" (t_en @ alignment).',",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_cuda/replica.py:134",
+    "code": "merged = exc @ w + bb",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/tests/test_ops.py:22",
+    "code": "def test_alignment_matrix_and_gather_equal_fp64_onehot_matmul(self):",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/tests/test_ops.py:33",
+    "code": "self.assertTrue(np.array_equal(x[:, idx].astype(np.float64), x.astype(np.float64) @ ora))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_cuda/oracle64.py:7",
+    "code": "re/im = frames @ bases^T; mag = sqrt(re^2 + im^2 + fp32(1e-14));",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_cuda/oracle64.py:36",
+    "code": "re = (fr @ wr.T).T                                                  # [11, F]",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_cuda/oracle64.py:37",
+    "code": "im = (fr @ wi.T).T",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_cuda/oracle64.py:55",
+    "code": "cp += W[:, :, t] @ vp[:, t:t + F]",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_cuda/oracle64.py:67",
+    "code": "ct[n:n + 5 * F:5] += Br[:, n] @ re",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_cuda/oracle64.py:68",
+    "code": "ct1[n:n + 5 * F:5] += Bi[:, n] @ im",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/tensor_requests/p1t_tests/adapters/tensorcuda_stub.py:95",
+    "code": "out = tc.matmul(cols.transpose(1, 2), W2.transpose(0, 1))           # (N, L, O)",
+    "ranks_class": "class a (rank 3 cols x rank 2 W2), the nn.Conv2D form"
+   },
+   {
+    "site": "Project-Voice/engine/tensor_requests/p1t_tests/adapters/tensorcuda_stub.py:122",
+    "code": "oc = tc.matmul(x2, Wt).transpose(1, 2)                               # (N, Og*K, T)",
+    "ranks_class": "class a (rank 3 x rank 2), the ConvTranspose form"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/model.py:725",
+    "code": "return self.tc.matmul(x, self.f32(W)) + self.f32(b)",
+    "ranks_class": "class a if W is rank 2 (linear weight via self.f32(W))"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/model.py:728",
+    "code": "return self.tc.matmul(s, self.f32(W), trans_b=True) + self.f32(b)",
+    "ranks_class": "class a if W is rank 2 (trans_b linear)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/model.py:810",
+    "code": "sc = tc.matmul(q * float(L['scale_q']), k * float(L['scale_k']))   # [1, 12, T, T]",
+    "ranks_class": "class b: q, k [1, 12, T, 64] per the inline comment [1,12,T,T]"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/model.py:812",
+    "code": "o = tc.matmul(p, v).permute([0, 2, 1, 3]).reshape([1, T, 768])",
+    "ranks_class": "class b: p [1,12,T,T] x v [1,12,T,64]"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_cuda/tools/ort_consistency_r2.py:54",
+    "code": "np.tanh(exc_o @ W + b))}",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_cuda/tools/validate_replica.py:96",
+    "code": "har_o = np.tanh(exc_o @ W.astype(np.float64) + float(b[0]))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   }
+  ],
+  "GRAPA-Native-LLM": [
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc39_anatomy.py:83",
+    "code": "expect = sum(float(g[n].astype(np.float64).ravel() @ d[n].astype(np.float64).ravel()) for n in d)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:673",
+    "code": "c_emb = float(cap[\"resid_in\"][0].astype(f8) @ d)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:677",
+    "code": "cm = cap[\"a\"][l].astype(f8) * (w[\"down\"][l].astype(f8).T @ d)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:678",
+    "code": "vo = w[\"o\"][l].astype(f8).T @ d",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:682",
+    "code": "aw, mw = cap[\"attn_write\"][l].astype(f8) @ d, cap[\"mlp_write\"][l].astype(f8) @ d",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:683",
+    "code": "rin, rout = cap[\"resid_in\"][l].astype(f8) @ d, cap[\"resid_out\"][l].astype(f8) @ d",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:1018",
+    "code": "# x @ W^T (tc.matmul trans_b); down is (d_model, d_ff) so column i is",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:1209",
+    "code": "lay[\"o_proj_trans_b\"].append(float(np.abs(Wo @ o - aw).max()) / scale)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:1210",
+    "code": "lay[\"o_proj_untransposed\"].append(float(np.abs(Wo.T @ o - aw).max()) / scale)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:1212",
+    "code": "lay[\"down_trans_b\"].append(float(np.abs(w[\"down\"][l].astype(np.float64) @ cap[\"a\"][l] - mw).max())",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/orders/seeds/attn_probe_cc9_lead.py:53",
+    "code": "scores = tc.matmul(q, k, alpha=scale, trans_b=True) + F._causal_mask(L, L, q.device.split(':')[0], q.dtype)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/orders/seeds/attn_probe_cc9_lead.py:66",
+    "code": "return tc.matmul(w, v)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/model.py:91",
+    "code": "return tc.matmul(h, self.emb.weight, trans_b=True)",
+    "ranks_class": "class a: emb.weight rank 2 (vocab, d)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc39b_which_op.py:133",
+    "code": "s = W.matmul(q2, k2, scale, True, True)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc39b_which_op.py:139",
+    "code": "out = W.matmul(p, v2, 1.0, False, True)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/codebooks.py:79",
+    "code": "rot = tc.matmul(u, R, trans_b=True)        # rotate into codebook basis",
+    "ranks_class": "class c: u (B,1,S,D) rank 4 x R (1,D,D) rank 3, B batch [1]"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/codebooks.py:85",
+    "code": "outs.append(tc.matmul(q, R))               # rotate back",
+    "ranks_class": "class c: q (B,1,S,D) rank 4 x R (1,D,D) rank 3"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/codebooks.py:99",
+    "code": "coords = (x / n) @ Rh[h].T",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc41_fwd_precision.py:102",
+    "code": "return float(x @ y / np.linalg.norm(x) / np.linalg.norm(y)), float(np.linalg.norm(x - y) / np.linalg.norm(y))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc61_cpu.py:106",
+    "code": "assert abs(float(cap2[\"attn_write\"][layer].astype(np.float64) @ d) - want) <= 1e-5",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc61_cpu.py:113",
+    "code": "assert abs(float(cap2[\"mlp_write\"][layer].astype(np.float64) @ d) - want) <= 1e-5",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc61_cpu.py:626",
+    "code": "assert \"        h = self.norm_f(h)\" in mla and \"return tc.matmul(h, w, trans_b=True)\" in mla",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc10_ablation.py:94",
+    "code": "return np.asarray(x) @ self.weight * refine_percentile",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc72_cpu.py:365",
+    "code": "def matmul(a, b, alpha=None, trans_b=False):",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc72_cpu.py:367",
+    "code": "return Tensor(np.matmul(a.x, bx) * (1 if alpha is None else alpha))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc60_cpu.py:254",
+    "code": "return FakeT(x.arr @ self.w.T)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc60_cpu.py:305",
+    "code": "g = x.arr[0] @ mod.gate.w.T",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc60_cpu.py:306",
+    "code": "a = (g / (1 + np.exp(-g))) * (x.arr[0] @ mod.up.w.T)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc60_cpu.py:318",
+    "code": "G = x.arr[0] @ mod.gate.w.T",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc60_cpu.py:319",
+    "code": "U = x.arr[0] @ mod.up.w.T",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc60_cpu.py:322",
+    "code": "manual = (a * (~zero)) @ mod.down.w.T",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/train.py:1344",
+    "code": "emit(f\"{timestamp()} | ckpt @ step {completed_step} \"",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc49_cpu.py:353",
+    "code": "return float(gw @ g), float(gw @ gw)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc49_cpu.py:357",
+    "code": "return float(gs @ g), float(gs @ gs)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc49_cpu.py:358",
+    "code": "return window_fn, set_fn, float(g @ g)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc49_cpu.py:407",
+    "code": "z = H @ Wm.T",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc49_cpu.py:412",
+    "code": "return (wv[:, None] * p).T @ H / wv.sum()",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc49_cpu.py:582",
+    "code": "\"\"\"logits_i = E[x_i] @ W: a model with exact per-position gradients (the fake engine's autograd).\"\"\"",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc49_cpu.py:601",
+    "code": "return _Logits((self.E.data[x[0]] @ self.W.data)[None], self, x)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc49_cpu.py:624",
+    "code": "np.add.at(dE, x, self.dz @ m.W.data.T.astype(np.float64))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc49_cpu.py:625",
+    "code": "m.E.grad, m.W.grad = c35.HostTensor(dE), c35.HostTensor(h.T @ self.dz)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_grad_anatomy.py:974",
+    "code": "ab += float(x @ y)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_grad_anatomy.py:975",
+    "code": "a2 += float(x @ x)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_grad_anatomy.py:976",
+    "code": "b2 += float(y @ y)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_grad_anatomy.py:1042",
+    "code": "cos = float(a @ r) / max(1e-300, na * nr)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/cc35_standin.py:93",
+    "code": "r = model.A.data @ logits.f + model.c.data - t",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/cc35_standin.py:94",
+    "code": "self.value = logits.gain * np.float32(r @ r)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/corpus/audits/answerability.py:78",
+    "code": "p = 1 / (1 + np.exp(-Xn @ w))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/corpus/audits/answerability.py:79",
+    "code": "g = Xn.T @ (p - y) / len(y) + l2 * w",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/corpus/audits/answerability.py:87",
+    "code": "return 1 / (1 + np.exp(-Xn @ w))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/cc46c_standin_probe.py:61",
+    "code": "tc.matmul = lambda a, b, alpha=1.0, trans_b=False: HT(np.matmul(a.data, b.data.T if trans_b else b.data) * alpha)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/fwd_precision.py:470",
+    "code": "return tc.matmul(h, w, trans_b=True)",
+    "ranks_class": "class a: emb weight rank 2"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/cc41_engine_double.py:251",
+    "code": "def matmul(a, b, alpha=1.0, trans_b=False):",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/cc41_engine_double.py:255",
+    "code": "out = (torch.matmul(a.t.float(), bt.float()) * float(alpha)).to(a.t.dtype)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/cc41_engine_double.py:330",
+    "code": "ranking = torch.matmul(qf, kf.transpose(-1, -2)) * scale",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/cc41_engine_double.py:331",
+    "code": "bulk = torch.matmul(qf, kqf.transpose(-1, -2)) * scale",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/cc41_engine_double.py:342",
+    "code": "return torch.matmul(torch.softmax(scores, -1), vf).to(q.dtype)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/attention.py:81",
+    "code": "ranking = tc.matmul(q, k, alpha=scale, trans_b=True)",
+    "ranks_class": "class b: q (B,H,L,D) x k after _repeat_kv -> (B,H,S,D)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/attention.py:89",
+    "code": "bulk = tc.matmul(q, kq, alpha=scale, trans_b=True)",
+    "ranks_class": "class b: q x kq after _repeat_kv"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/attention.py:115",
+    "code": "return tc.matmul(weights, v)",
+    "ranks_class": "class b: weights (B,H,L,S) x v after _repeat_kv"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc12_widening.py:101",
+    "code": "scores = query @ key.transpose(-1, -2) / math.sqrt(nope + rope)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc12_widening.py:105",
+    "code": "out = torch.softmax(scores, dim=-1) @ value",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc12_widening.py:115",
+    "code": "return h @ values['emb.weight'].T",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/model_mla.py:109",
+    "code": "return tc.matmul(h, w, trans_b=True)",
+    "ranks_class": "class a: emb weight rank 2"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/cc42_tf32_double.py:100",
+    "code": "def matmul(a, b, alpha=1.0, trans_b=False):",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/cc42_tf32_double.py:105",
+    "code": "out = torch.matmul(_RoundIn.apply(a.t, True), _RoundIn.apply(bt, True)) * float(alpha)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/cc42_tf32_double.py:107",
+    "code": "out = (torch.matmul(a.t.float(), bt.float()) * float(alpha)).to(a.t.dtype)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/bp_census_1_cpu.py:86",
+    "code": "(a.t @ (b.t.transpose(-1, -2) if trans_b else b.t)) * alpha)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/bp_census_1_cpu.py:109",
+    "code": "scores = (q.t @ k.t.transpose(-1, -2)) * scale",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/bp_census_1_cpu.py:110",
+    "code": "bulk = (q.t @ kq.t.transpose(-1, -2)) * scale",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/bp_census_1_cpu.py:119",
+    "code": "return Tensor(mixed.softmax(-1) @ v.t)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc27_mem_attention.py:101",
+    "code": "ranking = tc.matmul(q_answer, k, alpha=scale,",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc27_mem_attention.py:103",
+    "code": "bulk = tc.matmul(q_answer, kq, alpha=scale,",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc34_cpu_model.py:82",
+    "code": "return self.r(x @ self.w(name + '.weight').t())",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc34_cpu_model.py:105",
+    "code": "ranking = (q @ k.transpose(-1, -2)) * self.scale",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc34_cpu_model.py:106",
+    "code": "bulk = (q @ kq.transpose(-1, -2)) * self.scale",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc34_cpu_model.py:121",
+    "code": "return scores.softmax(-1) @ v, mask",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc34_cpu_model.py:194",
+    "code": "logits = self.r(h @ self.w('emb.weight').t())",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_anatomy.py:181",
+    "code": "scores = ((q @ k.transpose(-1, -2)) * self.scale).masked_fill(~visible, float('-inf'))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_anatomy.py:182",
+    "code": "return scores.softmax(-1) @ v, None",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_anatomy.py:186",
+    "code": "ranking = (q @ k.transpose(-1, -2)) * self.scale",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_anatomy.py:187",
+    "code": "bulk = (q @ kq.transpose(-1, -2)) * self.scale",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_anatomy.py:198",
+    "code": "return p @ v, mask",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_anatomy.py:598",
+    "code": "ab += float(x @ y)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_anatomy.py:599",
+    "code": "a2 += float(x @ x)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_anatomy.py:600",
+    "code": "b2 += float(y @ y)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc69_write_time.py:511",
+    "code": "scores = tc.matmul(query, key, alpha=scale, trans_b=True) + F._causal_mask(L, L, query.device.split(':')[0], query.dtype)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc69_write_time.py:517",
+    "code": "return tc.matmul(weights, value)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:235",
+    "code": "'GEMM (onehot(idx) @ W, the TF32 switch held off): the forward is the gather exactly (checked at '",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:236",
+    "code": "'the first call), the weight gradient is onehot^T @ dH by SGEMM instead of embed_bwd_kernel\\'s fp32 '",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:610",
+    "code": "\"\"\"The block-0 GEMMs of the model as the engine runs them (nn.Linear: tc.matmul(x (1,L,in),",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:611",
+    "code": "W (out,in), trans_b); backward dX = g (1,L,out) @ W; dW = g^T (1,out,L) @ x (1,L,in)), the APA",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:1215",
+    "code": "same.append(digest_tensor(tc.matmul(a, b, trans_b=shape['trans_b'])))",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:1221",
+    "code": "fresh.append(digest_tensor(tc.matmul(a2, b2, trans_b=shape['trans_b'])))",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:1321",
+    "code": "\"\"\"Arm i: tensor_cuda.nn.Embedding.forward -> onehot(idx) @ W, an fp32 GEMM with the TF32 switch held off",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:1323",
+    "code": "(every product is w * 1.0 or w * 0.0 and the zeros add exactly); the weight gradient becomes onehot^T @ dH by",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:1348",
+    "code": "out = tc.matmul(tc.tensor(onehot, dtype='float32'), self.weight)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:1432",
+    "code": "matmul_backward=('ops.cpp matmul: the backward captures the forward\\'s TF32 mode (TF32GemmGuard); dB = A^T @ g by '",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc10_ablation.py:2042",
+    "code": "scores = tc.matmul(q_h, k_h, alpha=self.scale, trans_b=True)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc10_ablation.py:2049",
+    "code": "out = tc.matmul(scores.softmax(-1), v)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc10_ablation.py:2134",
+    "code": "return tc.matmul(h, w, trans_b=True)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc72_query_side.py:381",
+    "code": "scores = tc.matmul(query, key, alpha=scale, trans_b=True) + F._causal_mask(L, L, query.device.split(':')[0], query.dtype)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc72_query_side.py:398",
+    "code": "return tc.matmul(weights, value)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc72_query_side.py:603",
+    "code": "query = np.asarray(arrays['answer'][ri], dtype=np.float64) @ maps[layer]",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:63",
+    "code": "composed chain -- matmul(alpha=scale) -> + causal bias (-1e4 in bf16) ->",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:337",
+    "code": "def matmul(a, b, alpha, trans_b, bf):",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:340",
+    "code": "out = S(alpha * (ad @ bt) if alpha != 1.0 else ad @ bt, bf)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:345",
+    "code": "ga = g @ (bd if trans_b else bd.transpose(-1, -2))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:348",
+    "code": "gb = g.transpose(-1, -2) @ ad if trans_b else ad.transpose(-1, -2) @ g",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:455",
+    "code": "return matmul(x, cast_down(w, bf), 1.0, True, bf)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:471",
+    "code": "ranking = (q @ k.transpose(-1, -2)) * scale",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:472",
+    "code": "bulk = (q @ kq.transpose(-1, -2)) * scale",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:480",
+    "code": "return scores.softmax(-1) @ v",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:484",
+    "code": "scores = ((q @ k.transpose(-1, -2)) * scale).masked_fill(~visible, float('-inf'))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:485",
+    "code": "return scores.softmax(-1) @ v",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:519",
+    "code": "s = rnd(scale * (q @ k.transpose(-1, -2)))                       # matmul(alpha=scale)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:527",
+    "code": "return rnd(p @ v), (e, ssum, p)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:555",
+    "code": "sc = ((qc @ kc.transpose(-1, -2)) * scale).masked_fill(~vis, float('-inf'))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:560",
+    "code": "dp = rnd(gc @ vc.transpose(-1, -2))                   # matmul: a first",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:561",
+    "code": "dv.append(rnd(p.transpose(-1, -2) @ gc))              # then b",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:566",
+    "code": "dq.append(rnd(scale * (gsh @ kc)))                   # matmul(alpha): a",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:567",
+    "code": "dk.append(rnd(scale * (gsh.transpose(-1, -2) @ qc)))  # then b",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:590",
+    "code": "s = st(scale * (q @ k.transpose(-1, -2))).masked_fill(~vis, float('-inf'))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:595",
+    "code": "return st(p @ v)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:800",
+    "code": "logits = matmul(hn, cast_down(self.p['emb.weight'], hb), 1.0, True, hb)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:886",
+    "code": "dot += float(x @ y)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:887",
+    "code": "na += float(x @ x)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:888",
+    "code": "nb += float(y @ y)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:890",
+    "code": "dd += float(d @ d)",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:1051",
+    "code": "return float(a @ b / max(1e-300, math.sqrt(float(a @ a) * float(b @ b))))",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:1296",
+    "code": "g, u = x @ w[pre + 'ffn.gate.weight'].t(), x @ w[pre + 'ffn.up.weight'].t()",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:1297",
+    "code": "return (torch.nn.functional.silu(g) * u) @ w[pre + 'ffn.down.weight'].t(), g, u",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39b_which_op.py:1399",
+    "code": "f\"max |dnll| elsewhere {r['max_abs_nll_dev_excl_4004']:.3g} @ {r['argmax_abs_nll_dev_excl_4004']}; \"",
+    "ranks_class": "not TensorCUDA (file does not import tensor_cuda)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_grad_variants.py:556",
+    "code": "ab += float(x @ y)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_grad_variants.py:557",
+    "code": "a2 += float(x @ x)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_grad_variants.py:558",
+    "code": "b2 += float(y @ y)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc58_bind_anatomy.py:363",
+    "code": "scores = tc.matmul(query, key, alpha=scale, trans_b=True) + F._causal_mask(L, L, query.device.split(\":\")[0], query.dtype)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc58_bind_anatomy.py:372",
+    "code": "return tc.matmul(weights, value)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   }
+  ]
+ },
+ "consumer_tensorcuda_sites": {
+  "Project-Voice/engine": [
+   {
+    "site": "Project-Voice/engine/kokoro_tc/tests/test_grad.py:819",
+    "code": "ad = float(g_sd @ d)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "Project-Voice/engine/tensor_requests/p1t_tests/adapters/tensorcuda_stub.py:95",
+    "code": "out = tc.matmul(cols.transpose(1, 2), W2.transpose(0, 1))           # (N, L, O)",
+    "ranks_class": "class a (rank 3 cols x rank 2 W2), the nn.Conv2D form"
+   },
+   {
+    "site": "Project-Voice/engine/tensor_requests/p1t_tests/adapters/tensorcuda_stub.py:122",
+    "code": "oc = tc.matmul(x2, Wt).transpose(1, 2)                               # (N, Og*K, T)",
+    "ranks_class": "class a (rank 3 x rank 2), the ConvTranspose form"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/model.py:725",
+    "code": "return self.tc.matmul(x, self.f32(W)) + self.f32(b)",
+    "ranks_class": "class a if W is rank 2 (linear weight via self.f32(W))"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/model.py:728",
+    "code": "return self.tc.matmul(s, self.f32(W), trans_b=True) + self.f32(b)",
+    "ranks_class": "class a if W is rank 2 (trans_b linear)"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/model.py:810",
+    "code": "sc = tc.matmul(q * float(L['scale_q']), k * float(L['scale_k']))   # [1, 12, T, T]",
+    "ranks_class": "class b: q, k [1, 12, T, 64] per the inline comment [1,12,T,T]"
+   },
+   {
+    "site": "Project-Voice/engine/kokoro_tc/model.py:812",
+    "code": "o = tc.matmul(p, v).permute([0, 2, 1, 3]).reshape([1, T, 768])",
+    "ranks_class": "class b: p [1,12,T,T] x v [1,12,T,64]"
+   }
+  ],
+  "GRAPA-Native-LLM": [
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:673",
+    "code": "c_emb = float(cap[\"resid_in\"][0].astype(f8) @ d)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:677",
+    "code": "cm = cap[\"a\"][l].astype(f8) * (w[\"down\"][l].astype(f8).T @ d)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:678",
+    "code": "vo = w[\"o\"][l].astype(f8).T @ d",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:682",
+    "code": "aw, mw = cap[\"attn_write\"][l].astype(f8) @ d, cap[\"mlp_write\"][l].astype(f8) @ d",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:683",
+    "code": "rin, rout = cap[\"resid_in\"][l].astype(f8) @ d, cap[\"resid_out\"][l].astype(f8) @ d",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:1018",
+    "code": "# x @ W^T (tc.matmul trans_b); down is (d_model, d_ff) so column i is",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:1209",
+    "code": "lay[\"o_proj_trans_b\"].append(float(np.abs(Wo @ o - aw).max()) / scale)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:1210",
+    "code": "lay[\"o_proj_untransposed\"].append(float(np.abs(Wo.T @ o - aw).max()) / scale)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc61_unknown_decision.py:1212",
+    "code": "lay[\"down_trans_b\"].append(float(np.abs(w[\"down\"][l].astype(np.float64) @ cap[\"a\"][l] - mw).max())",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/orders/seeds/attn_probe_cc9_lead.py:53",
+    "code": "scores = tc.matmul(q, k, alpha=scale, trans_b=True) + F._causal_mask(L, L, q.device.split(':')[0], q.dtype)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/orders/seeds/attn_probe_cc9_lead.py:66",
+    "code": "return tc.matmul(w, v)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/model.py:91",
+    "code": "return tc.matmul(h, self.emb.weight, trans_b=True)",
+    "ranks_class": "class a: emb.weight rank 2 (vocab, d)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/codebooks.py:79",
+    "code": "rot = tc.matmul(u, R, trans_b=True)        # rotate into codebook basis",
+    "ranks_class": "class c: u (B,1,S,D) rank 4 x R (1,D,D) rank 3, B batch [1]"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/codebooks.py:85",
+    "code": "outs.append(tc.matmul(q, R))               # rotate back",
+    "ranks_class": "class c: q (B,1,S,D) rank 4 x R (1,D,D) rank 3"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/codebooks.py:99",
+    "code": "coords = (x / n) @ Rh[h].T",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc60_cpu.py:254",
+    "code": "return FakeT(x.arr @ self.w.T)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc60_cpu.py:305",
+    "code": "g = x.arr[0] @ mod.gate.w.T",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc60_cpu.py:306",
+    "code": "a = (g / (1 + np.exp(-g))) * (x.arr[0] @ mod.up.w.T)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc60_cpu.py:318",
+    "code": "G = x.arr[0] @ mod.gate.w.T",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc60_cpu.py:319",
+    "code": "U = x.arr[0] @ mod.up.w.T",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/tests/test_cc60_cpu.py:322",
+    "code": "manual = (a * (~zero)) @ mod.down.w.T",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/train.py:1344",
+    "code": "emit(f\"{timestamp()} | ckpt @ step {completed_step} \"",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/fwd_precision.py:470",
+    "code": "return tc.matmul(h, w, trans_b=True)",
+    "ranks_class": "class a: emb weight rank 2"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/attention.py:81",
+    "code": "ranking = tc.matmul(q, k, alpha=scale, trans_b=True)",
+    "ranks_class": "class b: q (B,H,L,D) x k after _repeat_kv -> (B,H,S,D)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/attention.py:89",
+    "code": "bulk = tc.matmul(q, kq, alpha=scale, trans_b=True)",
+    "ranks_class": "class b: q x kq after _repeat_kv"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/attention.py:115",
+    "code": "return tc.matmul(weights, v)",
+    "ranks_class": "class b: weights (B,H,L,S) x v after _repeat_kv"
+   },
+   {
+    "site": "GRAPA-Native-LLM/grapa/model_mla.py:109",
+    "code": "return tc.matmul(h, w, trans_b=True)",
+    "ranks_class": "class a: emb weight rank 2"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc69_write_time.py:511",
+    "code": "scores = tc.matmul(query, key, alpha=scale, trans_b=True) + F._causal_mask(L, L, query.device.split(':')[0], query.dtype)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc69_write_time.py:517",
+    "code": "return tc.matmul(weights, value)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:235",
+    "code": "'GEMM (onehot(idx) @ W, the TF32 switch held off): the forward is the gather exactly (checked at '",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:236",
+    "code": "'the first call), the weight gradient is onehot^T @ dH by SGEMM instead of embed_bwd_kernel\\'s fp32 '",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:610",
+    "code": "\"\"\"The block-0 GEMMs of the model as the engine runs them (nn.Linear: tc.matmul(x (1,L,in),",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:611",
+    "code": "W (out,in), trans_b); backward dX = g (1,L,out) @ W; dW = g^T (1,out,L) @ x (1,L,in)), the APA",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:1215",
+    "code": "same.append(digest_tensor(tc.matmul(a, b, trans_b=shape['trans_b'])))",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:1221",
+    "code": "fresh.append(digest_tensor(tc.matmul(a2, b2, trans_b=shape['trans_b'])))",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:1321",
+    "code": "\"\"\"Arm i: tensor_cuda.nn.Embedding.forward -> onehot(idx) @ W, an fp32 GEMM with the TF32 switch held off",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:1323",
+    "code": "(every product is w * 1.0 or w * 0.0 and the zeros add exactly); the weight gradient becomes onehot^T @ dH by",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:1348",
+    "code": "out = tc.matmul(tc.tensor(onehot, dtype='float32'), self.weight)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc46_determinism.py:1432",
+    "code": "matmul_backward=('ops.cpp matmul: the backward captures the forward\\'s TF32 mode (TF32GemmGuard); dB = A^T @ g by '",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc10_ablation.py:2042",
+    "code": "scores = tc.matmul(q_h, k_h, alpha=self.scale, trans_b=True)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc10_ablation.py:2049",
+    "code": "out = tc.matmul(scores.softmax(-1), v)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc10_ablation.py:2134",
+    "code": "return tc.matmul(h, w, trans_b=True)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc72_query_side.py:381",
+    "code": "scores = tc.matmul(query, key, alpha=scale, trans_b=True) + F._causal_mask(L, L, query.device.split(':')[0], query.dtype)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc72_query_side.py:398",
+    "code": "return tc.matmul(weights, value)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc72_query_side.py:603",
+    "code": "query = np.asarray(arrays['answer'][ri], dtype=np.float64) @ maps[layer]",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_grad_variants.py:556",
+    "code": "ab += float(x @ y)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_grad_variants.py:557",
+    "code": "a2 += float(x @ x)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc39_grad_variants.py:558",
+    "code": "b2 += float(y @ y)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc58_bind_anatomy.py:363",
+    "code": "scores = tc.matmul(query, key, alpha=scale, trans_b=True) + F._causal_mask(L, L, query.device.split(\":\")[0], query.dtype)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   },
+   {
+    "site": "GRAPA-Native-LLM/scripts/cc58_bind_anatomy.py:372",
+    "code": "return tc.matmul(weights, value)",
+    "ranks_class": "dynamic (file imports tensor_cuda; operands not fixed at the site, or a NumPy @ in a mixed file)"
+   }
+  ]
+ },
+ "consumer_artifact_copies_by_file": {
+  "Project-Voice/engine": {},
+  "GRAPA-Native-LLM": {
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/resume_identity_bypass/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/resume_identity_bypass/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/resume_identity_bypass/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/erosion_bypass/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/resume_identity_bypass/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/resume_identity_bypass/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/resume_identity_bypass/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/erosion_bypass/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/distance_off_by_one/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/resume_identity_bypass/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/resume_identity_bypass/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/resume_identity_bypass/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/resume_identity_bypass/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/distance_off_by_one/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/wsp_c2_probe/probe2.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/erosion_bypass/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/erosion_bypass/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/erosion_bypass/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/erosion_bypass/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/lead_reads/final_norm_share_2026-10-22/final_norm_share.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/distance_off_by_one/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/erosion_bypass/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/erosion_bypass/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/effect_sign/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/erosion_bypass/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/distance_off_by_one/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/distance_off_by_one/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/erosion_bypass/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/effect_sign/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/count_truncation/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/pin_bypass/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/watchdog_deadline/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/erosion_bypass/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/answer_span_shift/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/erosion_bypass/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/effect_sign/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/count_truncation/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/answer_span_shift/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/pin_bypass/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/watchdog_deadline/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/answer_span_shift/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/answer_span_shift/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/effect_sign/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/answer_span_shift/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/count_truncation/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/count_truncation/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/pin_bypass/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/effect_sign/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/watchdog_deadline/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/answer_span_shift/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/answer_span_shift/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/effect_sign/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/count_truncation/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/pin_bypass/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/answer_span_shift/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/count_truncation/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/watchdog_deadline/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/count_truncation/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/pin_bypass/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/spillover_omission/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/answer_span_shift/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/watchdog_deadline/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/answer_span_shift/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/spillover_omission/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/count_truncation/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/pin_bypass/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/count_truncation/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/watchdog_deadline/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/spillover_omission/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/count_truncation/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/count_truncation/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/spillover_omission/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/count_truncation/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/spillover_omission/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/distance_off_by_one/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/distance_off_by_one/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/update_bound/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/distance_off_by_one/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/pin_bypass/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/distance_off_by_one/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/update_bound/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/source_index/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/effect_sign/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/distance_off_by_one/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/pin_bypass/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/source_index/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/update_bound/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/weight_cap_bypass/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/source_index/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/effect_sign/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/pin_bypass/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/weight_cap_bypass/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/source_index/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/update_bound/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/source_index/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/update_bound/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/pin_bypass/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/effect_sign/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/pin_bypass/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/weight_cap_bypass/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/source_index/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/update_bound/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/effect_sign/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/pin_bypass/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/effect_sign/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/weight_cap_bypass/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/weight_cap_bypass/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/spillover_omission/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/spillover_omission/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/effect_sign/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/separator_omission/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/spillover_omission/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/spillover_omission/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/separator_omission/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/separator_omission/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/spillover_omission/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/separator_omission/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/separator_omission/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/source_swap_noop/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/fresh_index/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/weight_cap_bypass/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/source_swap_noop/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/budget_bypass/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/fresh_index/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/source_swap_noop/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/update_bound/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/weight_cap_bypass/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/fresh_index/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/fresh_index/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/source_swap_noop/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/gap_sign/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/source_swap_noop/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/fresh_index/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/weight_cap_bypass/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/budget_bypass/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/fresh_index/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/update_bound/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/source_swap_noop/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/source_index/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/fresh_index/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/weight_cap_bypass/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/source_swap_noop/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/gap_sign/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/weight_cap_bypass/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/budget_bypass/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/source_swap_noop/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/fresh_index/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/fresh_index/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/update_bound/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/source_index/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/source_swap_noop/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/budget_bypass/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/gap_sign/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/source_swap_noop/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/fresh_index/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/budget_bypass/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/update_bound/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/snapshot_pin_bypass/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/quarter_boundary/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/source_index/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/update_bound/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/gap_sign/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/source_index/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/budget_bypass/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/snapshot_pin_bypass/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/quarter_boundary/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/gap_sign/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/repeat_count/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/update_bound/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/source_index/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/repeat_count/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/quarter_boundary/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/source_index/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/gap_sign/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/repeat_count/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/repeat_count/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/snapshot_pin_bypass/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/quarter_boundary/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/quarter_boundary/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/budget_bypass/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/repeat_count/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/snapshot_pin_bypass/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/repeat_count/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/repeat_count/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/snapshot_pin_bypass/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/budget_bypass/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/repeat_count/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/branch_identity_bypass/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/quarter_boundary/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/repeat_count/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/branch_identity_bypass/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/quarter_boundary/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/repeat_count/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/quarter_boundary/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/quarter_boundary/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/budget_bypass/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5/mutation/quarter_boundary/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/branch_identity_bypass/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/gap_sign/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/gap_sign/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/budget_bypass/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/branch_identity_bypass/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/budget_bypass/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/branch_identity_bypass/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/adam_reset/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/update_bound/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/gap_sign/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations/budget_bypass/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/adam_reset/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/update_bound/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/gap_sign/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/separator_omission/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/gap_sign/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3_retry/gap_sign/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/adam_reset/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/adam_reset/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/separator_omission/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/adam_reset/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/update_bound/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/separator_omission/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/update_bound/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/separator_omission/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/original_mutation/separator_omission/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/update_bound/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/source_index_shift/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/spillover_drop/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/source_index_shift/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/source_index_shift/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3/watchdog_deadline/scripts/bp_census_1_cpu.py": 4,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3/watchdog_deadline/grapa/model.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/spillover_drop/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/spillover_drop/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/source_index_shift/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/spillover_drop/grapa/train.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/spillover_drop/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_integration/mutation/source_index_shift/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3/watchdog_deadline/grapa/attention.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3/watchdog_deadline/grapa/codebooks.py": 3,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3/watchdog_deadline/grapa/model_mla.py": 1,
+   "GRAPA-Native-LLM/artifacts/cc5_screen/mutations_v3/watchdog_deadline/grapa/train.py": 1
+  }
+ },
+ "n1_callers": [
+  {
+   "site_build_B": "tensor_cuda/src/bindings.cpp:88",
+   "lines_in_build_E": [
+    95
+   ],
+   "code": "DType dt = numpy_dtype(arr);",
+   "ranks_class": "the only caller of numpy_dtype",
+   "note": "tensor_from_numpy"
+  },
+  {
+   "site_build_B": "tensor_cuda/src/bindings.cpp:2071",
+   "lines_in_build_E": [
+    2078
+   ],
+   "code": "m.def(\"tensor\", &tensor_from_numpy, py::arg(\"array\"), py::arg(\"device\") = \"cuda\",",
+   "ranks_class": "the only binding of tensor_from_numpy: Python name _C.tensor (there is no _C.tensor_from_numpy)",
+   "note": "binding"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/__init__.py:63",
+   "lines_in_build_E": [
+    63
+   ],
+   "code": "result = _C.tensor(arr, device, False).astype(dtype).detach()",
+   "ranks_class": "casts first: arr is np.float32 (bfloat16 device-cast path)",
+   "note": "_tensor_from_device_cast"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/__init__.py:75",
+   "lines_in_build_E": [
+    75
+   ],
+   "code": "return _C.tensor(arr, device, requires_grad)",
+   "ranks_class": "casts first: np.asarray(data, dtype=_np_dtype(dtype)), a listed dtype (ENG2 F1 refuses others)",
+   "note": "tc.tensor"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/__init__.py:90",
+   "lines_in_build_E": [
+    90,
+    101
+   ],
+   "code": "return _C.tensor(np.ascontiguousarray(arr), device, requires_grad)",
+   "ranks_class": "casts first: astype(_np_dtype(dtype))",
+   "note": "zeros/ones/randn/rand factories"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/__init__.py:101",
+   "lines_in_build_E": [
+    90,
+    101
+   ],
+   "code": "return _C.tensor(np.ascontiguousarray(arr), device, requires_grad)",
+   "ranks_class": "NO cast: the caller's dtype goes straight to numpy_dtype (unlisted dtypes: float32 garbage before N1, TypeError after)",
+   "note": "tc.from_numpy"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/__init__.py:1394",
+   "lines_in_build_E": [
+    1394
+   ],
+   "code": "idx = _C.tensor(np.ascontiguousarray(np.asarray(idx, dtype=np.int64)), \"cuda\", False)",
+   "ranks_class": "casts first: int64",
+   "note": "embedding"
+  },
+  {
+   "site_build_B": "tensor_cuda/tensor_cuda/__init__.py:1424",
+   "lines_in_build_E": [
+    1424
+   ],
+   "code": "return _C.cross_entropy(logits, _C.tensor(onehot, device, False))",
+   "ranks_class": "casts first: onehot built as np.float32",
+   "note": "cross_entropy"
+  },
+  {
+   "site_build_B": "tensor_cuda/tests/test_bwd_r1_core.py:48",
+   "lines_in_build_E": [
+    48
+   ],
+   "code": "xs = tuple(tc.from_numpy(a, requires_grad=True) for a in case.operands)",
+   "ranks_class": "test; operands are float32 (oracle f32() / np.float32 arrays)",
+   "note": "test"
+  },
+  {
+   "site_build_B": "tensor_cuda/tests/test_bwd_r1_core.py:51",
+   "lines_in_build_E": [
+    51
+   ],
+   "code": "(forward * tc.from_numpy(case.seed)).sum().backward()",
+   "ranks_class": "test; seed float32 (seed_with_zeros of f32 data)",
+   "note": "test"
+  },
+  {
+   "site_build_B": "tensor_cuda/tests/test_eng1.py:80",
+   "lines_in_build_E": [
+    80
+   ],
+   "code": "return tc.from_numpy(np.zeros(shape, dtype=dtype), device=\"cpu\")",
+   "ranks_class": "test; dtype parameter (default float32)",
+   "note": "test"
+  },
+  {
+   "site_build_B": "tensor_cuda/tests/test_eng1.py:622",
+   "lines_in_build_E": [
+    622
+   ],
+   "code": "\"cpu = lambda s, d=np.float32: tc.from_numpy(np.zeros(s, dtype=d), device='cpu')\\n\"",
+   "ranks_class": "test (subprocess source text); default float32",
+   "note": "test"
+  }
+ ],
+ "n1_consumer_callers": "rg for tc.from_numpy / tensor_cuda.from_numpy / _C.tensor in both consumer roots: no site"
+}

@@ -1,0 +1,12 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng4/tensor_cuda/src/bindings.cpp	2026-11-23 08:56:32.844205877 -0500
++++ /tmp/eng4_src_m07_byteorder/tensor_cuda/src/bindings.cpp	2026-11-23 08:57:00.060836049 -0500
+@@ -80,7 +80,8 @@
+   // example '>f4'), whose bytes from_host then copied unswapped. Such a dtype is refused, naming it; the public
+   // tensor_cuda.tensor casts to a native dtype first, so it is unaffected. Prior art: NumPy's dtype.isnative (and
+   // dtype.byteorder); ours: the refusal at the C++ entry.
+-  if (!dt.attr("isnative").cast<bool>())
++  std::fprintf(stderr, "ENG4-MUTANT m07_byteorder executed\n"); std::fflush(stderr); 
++  if (false)
+     throw py::type_error("tensor: non-native byte order NumPy dtype " + py::str(py::object(dt)).cast<std::string>() +
+                          " (byteorder '" + py::str(dt.attr("byteorder")).cast<std::string>() +
+                          "'); convert it first, for example with arr.astype(arr.dtype.newbyteorder('='))");

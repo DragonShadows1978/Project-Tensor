@@ -1,0 +1,10 @@
+zero_leading_2^32_2^32_0 accepted batch 0 out batch dims product 0 match True path empty_return
+zero_leading_0_first accepted batch 0 out batch dims product 0 match True path empty_return
+product_eq_INT_MAX accepted batch 2147483647 out batch dims product 2147483647 match True path gemm
+product_eq_INT_MAX_1x accepted batch 2147483647 out batch dims product 2147483647 match True path gemm
+product_just_under accepted batch 2147450880 out batch dims product 2147450880 match True path gemm
+product_over_2^16x2^15 refused issue 6 true product 2147483648 >INT_MAX True |  raised: matmul refused: GEMM batch count above INT_MAX: the product of A's leading extents exceeds 2147483647 at leading dimension 1 (65536 x 32768) (
+product_over_2^31 refused issue 6 true product 2147483648 >INT_MAX True |  raised: matmul refused: GEMM batch count above INT_MAX: the product of A's leading extents exceeds 2147483647 at leading dimension 0 (1 x 2147483648) 
+naive_over_2^63_2^32x2^32 refused issue 6 true product 18446744073709551616 >INT_MAX True |  raised: matmul refused: GEMM batch count above INT_MAX: the product of A's leading extents exceeds 2147483647 at leading dimension 0 (1 x 4294967296) 
+naive_over_2^63_3x2^62 refused issue 6 true product 13835058055282163712 >INT_MAX True |  raised: matmul refused: GEMM batch count above INT_MAX: the product of A's leading extents exceeds 2147483647 at leading dimension 1 (3 x 461168601842
+control_nonzero accepted batch 3 out batch dims product 3 match True path gemm

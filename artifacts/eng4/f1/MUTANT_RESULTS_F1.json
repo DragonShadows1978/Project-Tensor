@@ -1,0 +1,796 @@
+{
+ "written_utc": "2026-11-23T14:16:54.793977+00:00",
+ "MUTANTS_F1.json_sha256": "cbeeb7062d1fa1149e72dc3db585d7a413e7d44e10e26423de71b46ccfabd535",
+ "mutants": {
+  "m01_f1": {
+   "module_sha256": "25dca0e6026288407ca473cc01461581851c488e834956a41668565e5a55c062",
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul refused: .*batch.*(A [2, 3, 2, 3] on ..., B [3, 2, 3, 4] on ...') -- the mutant accepts the equal-count pair, so the call reaches the GEMM and raises the no-device CUDA error instead (regex does not match)",
+   "cpu_rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m3_refuses[eq_count_diff_shape]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: .*batch.*\\\\(A\\\\ \\\\[2,\\\\ 3,\\\\ 2,\\\\ 3\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[3,\\\\ 2,\\\\ 3,\\\\ 4\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m01_f1_0.xml"
+    }
+   ],
+   "cpu_killing_tests": 1,
+   "killed_on_cpu": true
+  },
+  "m02_f1": {
+   "module_sha256": "e0e4381ed515d5647285d1f93a6a5f3abdd3b408212ec195ceb41cc03474041c",
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul refused: operands are on different devices (A ... on <dev>, B ... on <dev>') -- CPU: the zero-element CUDA operand lets the call reach the output allocation / GEMM (CUDA error); GPU line: nonzero host + CUDA operands reach cuBLAS (any outcome other than the refusal fails the regex or 'DID NOT RAISE')",
+   "cpu_rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_device_refuses[host_a_cuda_b]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m02_f1_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_device_refuses[cuda_a_host_b]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: operands are on different devices \\\\(A\\\\ \\\\[2,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[0,\\\\ 3\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'cudaMalloc failed: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m02_f1_1.xml"
+    }
+   ],
+   "cpu_killing_tests": 2,
+   "killed_on_cpu": true,
+   "gpu_line": {
+    "line": "mut_m02_f1",
+    "rows": [
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_m4_device_refuses_nonzero_operands[cuda_a_host_b]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+      "log": "m02_f1_0.log",
+      "junit": "m02_f1_0.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_m4_device_refuses_nonzero_operands[host_a_cuda_b]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+      "log": "m02_f1_1.log",
+      "junit": "m02_f1_1.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     }
+    ],
+    "killed": true
+   }
+  },
+  "m03_f1": {
+   "module_sha256": "c820e0bf3c156d9b9803eb10f9dd90f33db6061c8632be4c3510a20673804678",
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul refused: GEMM (dimension|batch count) above INT_MAX.*(A ..., B ...') -- the mutant lets the call reach the GEMM (no-device CUDA error)",
+   "cpu_rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[M_over_intmax]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m03_f1_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[N_over_intmax]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m03_f1_1.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[N_over_intmax_trans]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m03_f1_2.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[K_over_intmax]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m03_f1_3.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[K_over_intmax_trans]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m03_f1_4.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[batch_over_intmax_b2d]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m03_f1_5.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m4_size_refuses[batch_over_intmax_eq_rank]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m03_f1_6.xml"
+    }
+   ],
+   "cpu_killing_tests": 7,
+   "killed_on_cpu": true
+  },
+  "m04_f1": {
+   "module_sha256": "abf6c1599d21772a3265758714522246a1979428baebf2dca70e990355980e26",
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul refused: .*batch.*(A [2, 2, 3] ..., B [1, 3, 4] ...') (and the rank-4 case) -- the mutant accepts, the call reaches the GEMM",
+   "cpu_rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m3_refuses[eq_rank_ones_b_under_larger_a]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: .*batch.*\\\\(A\\\\ \\\\[2,\\\\ 2,\\\\ 3\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[1,\\\\ 3,\\\\ 4\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m04_f1_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_m3_refuses[eq_rank_ones_b_under_larger_a_rank4]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul refused: .*batch.*\\\\(A\\\\ \\\\[2,\\\\ 3,\\\\ 2,\\\\ 3\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[1,\\\\ 1,\\\\ 3,\\\\ 4\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'CUDA error at matmul: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m04_f1_1.xml"
+    }
+   ],
+   "cpu_killing_tests": 2,
+   "killed_on_cpu": true
+  },
+  "m05_f1": {
+   "module_sha256": "290302ca0ccc1d4e5e354f7b494d9a72f7c8276cdc167c62b0483f775df4a4e1",
+   "named_assertion": "pytest.raises(TypeError, match='unsupported NumPy dtype <name>') -- the mutant returns a float32 tensor: 'DID NOT RAISE'",
+   "cpu_rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[float64-_C.tensor]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m05_f1_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[float64-from_numpy]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m05_f1_1.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[int32-_C.tensor]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m05_f1_2.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[int32-from_numpy]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m05_f1_3.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[uint16-_C.tensor]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m05_f1_4.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_g1_n1_refuses_unlisted[uint16-from_numpy]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m05_f1_5.xml"
+    }
+   ],
+   "cpu_killing_tests": 6,
+   "killed_on_cpu": true
+  },
+  "m06_dtype_after_alloc": {
+   "module_sha256": "d1b99ed046bc5c47bc42322b2530193e9011c0a0f6cf5ed82cd80b804f3948bd",
+   "named_assertion": "pytest.raises(RuntimeError, match='^matmul supports float32/float16/bfloat16 only: operand dtype <d> (A ..., B ...)') -- host K = 0 / empty-output pairs then return a result ('DID NOT RAISE'); the zero-element CUDA pair reaches its output allocation (cudaMalloc error, regex mismatch). The nonempty K > 0 host pair is NOT a killing test: there the late refusal follows a host malloc (no CUDA call) with the same message, so this mutant cannot be seen through it.",
+   "cpu_rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[int64-host_k0]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m06_dtype_after_alloc_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[int64-host_empty_out]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m06_dtype_after_alloc_1.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[int64-host_batched_k0]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m06_dtype_after_alloc_2.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[int64-cuda_k0]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul supports float32/float16/bfloat16 only: operand dtype int64 \\\\(A\\\\ \\\\[2,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[0,\\\\ 4\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'cudaMalloc failed: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m06_dtype_after_alloc_3.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[uint8-host_k0]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m06_dtype_after_alloc_4.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[uint8-host_empty_out]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m06_dtype_after_alloc_5.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[uint8-host_batched_k0]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m06_dtype_after_alloc_6.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[uint8-cuda_k0]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul supports float32/float16/bfloat16 only: operand dtype uint8 \\\\(A\\\\ \\\\[2,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[0,\\\\ 4\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'cudaMalloc failed: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m06_dtype_after_alloc_7.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[bool-host_k0]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m06_dtype_after_alloc_8.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[bool-host_empty_out]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m06_dtype_after_alloc_9.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[bool-host_batched_k0]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'RuntimeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m06_dtype_after_alloc_10.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_unsupported_dtype_refuses[bool-cuda_k0]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "AssertionError: Regex pattern did not match.\n  Expected regex: '^matmul supports float32/float16/bfloat16 only: operand dtype bool \\\\(A\\\\ \\\\[2,\\\\ 0\\\\]\\\\ on\\\\ \\\\S+,\\\\ B\\\\ \\\\[0,\\\\ 4\\\\]\\\\ on\\\\ \\\\S+'\n  Actual message: 'cudaMalloc failed: no CUDA-capable device is detected'",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m06_dtype_after_alloc_11.xml"
+    }
+   ],
+   "cpu_killing_tests": 12,
+   "killed_on_cpu": true
+  },
+  "m07_byteorder": {
+   "module_sha256": "04382dafec9ed0d094bd18d01422a2de67cb0d37ca61dfd0c222b604cee04a09",
+   "named_assertion": "pytest.raises(TypeError, match='non-native byte order NumPy dtype <d>') -- 'DID NOT RAISE'",
+   "cpu_rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_byteorder_refuses[>f4-_C.tensor]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m07_byteorder_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_byteorder_refuses[>f4-from_numpy]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m07_byteorder_1.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_byteorder_refuses[>f2-_C.tensor]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m07_byteorder_2.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_byteorder_refuses[>f2-from_numpy]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m07_byteorder_3.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_byteorder_refuses[>i8-_C.tensor]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m07_byteorder_4.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_byteorder_refuses[>i8-from_numpy]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: DID NOT RAISE <class 'TypeError'>",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m07_byteorder_5.xml"
+    }
+   ],
+   "cpu_killing_tests": 6,
+   "killed_on_cpu": true
+  },
+  "m08_k0_gemm": {
+   "module_sha256": "3b78368f74ea358b4737b1a6d9751832fd8fd282dc1a658d7d5b3e050b02e3d2",
+   "named_assertion": "the zero check of test_gpu_zero_size_returns_numpy_result[<K0 cells>] (GPU line mut_m08): pytest.fail('zero check: ...') when the call raises (cuBLAS refuses lda = 0, now checked) or 'zero check: K = 0 must give positive zeros' if it returns unwritten memory. CPU part: the same zero check in test_h1_zero_size_returns_numpy_result[<K0 cells>] (no device: the GEMM path raises the CUDA error).",
+   "cpu_rows": [
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[a_K0-float32]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_0.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[a_K0-float16]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_1.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[a_K0-bfloat16]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_2.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[a_K0_trans-float32]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_3.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[a_K0_trans-float16]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_4.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[a_K0_trans-bfloat16]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_5.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[b_K0-float32]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_6.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[b_K0-float16]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_7.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[b_K0-bfloat16]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_8.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[b_rank2_K0-float32]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_9.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[b_rank2_K0-float16]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_10.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[b_rank2_K0-bfloat16]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_11.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[c_K0-float32]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_12.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[c_K0-float16]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_13.xml"
+    },
+    {
+     "test": "tensor_cuda/tests/test_eng4_matmul.py::test_h1_zero_size_returns_numpy_result[c_K0-bfloat16]",
+     "pytest_exit": 1,
+     "outcome": "failed",
+     "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: CUDA error at matmul: no CUDA-capable device is detected",
+     "named_assertion_failed": true,
+     "mutated_line_executed_in_test": true,
+     "killed": true,
+     "junit": "artifacts/eng4/f1/mutants/runs/m08_k0_gemm_14.xml"
+    }
+   ],
+   "cpu_killing_tests": 15,
+   "killed_on_cpu": true,
+   "gpu_line": {
+    "line": "mut_m08",
+    "rows": [
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[a_K0-float32]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_0.log",
+      "junit": "m08_k0_gemm_0.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[a_K0-float16]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_1.log",
+      "junit": "m08_k0_gemm_1.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[a_K0-bfloat16]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_2.log",
+      "junit": "m08_k0_gemm_2.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[a_K0_trans-float32]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_3.log",
+      "junit": "m08_k0_gemm_3.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[a_K0_trans-float16]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_4.log",
+      "junit": "m08_k0_gemm_4.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[a_K0_trans-bfloat16]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_5.log",
+      "junit": "m08_k0_gemm_5.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[b_K0-float32]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_6.log",
+      "junit": "m08_k0_gemm_6.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[b_K0-float16]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_7.log",
+      "junit": "m08_k0_gemm_7.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[b_K0-bfloat16]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_8.log",
+      "junit": "m08_k0_gemm_8.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[b_rank2_K0-float32]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_9.log",
+      "junit": "m08_k0_gemm_9.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[b_rank2_K0-float16]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_10.log",
+      "junit": "m08_k0_gemm_10.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[b_rank2_K0-bfloat16]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_11.log",
+      "junit": "m08_k0_gemm_11.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[c_K0-float32]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_12.log",
+      "junit": "m08_k0_gemm_12.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[c_K0-float16]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_13.log",
+      "junit": "m08_k0_gemm_13.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     },
+     {
+      "test": "tensor_cuda/tests/test_eng4_matmul.py::test_gpu_zero_size_returns_numpy_result[c_K0-bfloat16]",
+      "pytest_exit": 1,
+      "outcome": "failed",
+      "failure_message": "Failed: zero check: a zero-size matmul must return NumPy's result, it raised: matmul: cuBLAS GEMM returned CUBLAS_STATUS_INVALID_VALUE (7)",
+      "log": "m08_k0_gemm_14.log",
+      "junit": "m08_k0_gemm_14.xml",
+      "marker_seen": true,
+      "named_assertion_failed": true,
+      "process_died": false,
+      "killed": true
+     }
+    ],
+    "killed": true
+   }
+  }
+ }
+}

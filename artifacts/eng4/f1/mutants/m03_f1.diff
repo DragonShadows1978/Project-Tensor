@@ -1,0 +1,21 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng4/tensor_cuda/src/matmul.cu	2026-11-23 08:56:32.842828976 -0500
++++ /tmp/eng4_src_m03_f1/tensor_cuda/src/matmul.cu	2026-11-23 08:57:00.032284147 -0500
+@@ -86,7 +86,8 @@
+   if (a.device.type != b.device.type || a.device.index != b.device.index)
+     return refuse(p, MatmulOperandIssue::Device, "operands are on different devices", a, b, trans_b);
+   // M4: the cuBLAS API takes M, N, K, the leading dimensions (K or N) and the batch count as int.
+-  if (p.m > INT_MAX || p.n > INT_MAX || p.k > INT_MAX)
++  std::fprintf(stderr, "ENG4-MUTANT m03_f1 executed\n"); std::fflush(stderr); 
++  if (false)
+     return refuse(p, MatmulOperandIssue::Dim,
+                   "GEMM dimension above INT_MAX: M " + std::to_string(p.m) + ", N " + std::to_string(p.n) + ", K " +
+                       std::to_string(p.k),
+@@ -100,7 +101,7 @@
+   }
+   p.out_shape.push_back(p.m);
+   p.out_shape.push_back(p.n);
+-  if (p.batch > INT_MAX)
++  if (false)
+     return refuse(p, MatmulOperandIssue::BatchCount,
+                   "GEMM batch count above INT_MAX: " + std::to_string(p.batch), a, b, trans_b);
+   // M2/M3: the batch classes. The stride rule is the forward's original one, (ndb == nda) -> B stride K*N, else 0,

@@ -1,0 +1,1550 @@
+diff --git a/tensor_cuda/src/matmul.cu b/tensor_cuda/src/matmul.cu
+index a3a7f77be..2e0c34f06 100644
+--- a/tensor_cuda/src/matmul.cu
++++ b/tensor_cuda/src/matmul.cu
+@@ -91,18 +91,30 @@ MatmulOperandPlan matmul_operand_plan(const NDArray& a, const NDArray& b, bool t
+                   "GEMM dimension above INT_MAX: M " + std::to_string(p.m) + ", N " + std::to_string(p.n) + ", K " +
+                       std::to_string(p.k),
+                   a, b, trans_b);
+-  // Batch = product of A's leading dims, the arithmetic the forward has always used. Every NDArray's nonzero
+-  // extents multiply to at most INT64_MAX bytes (NDArray constructor), so this product cannot overflow.
+-  p.batch = 1;
+-  for (int d = 0; d < nda - 2; ++d) {
+-    p.batch *= a.shape[d];
+-    p.out_shape.push_back(a.shape[d]);
+-  }
++  // Batch = product of A's leading dims. ENG4-F2 Y1 (ENG4R2-F01): a metadata reshape of a zero-element tensor can
++  // carry leading extents whose plain product overflows int64 (for example 2^32 x 2^32 x 0), so the product is no
++  // longer formed blindly. If any leading extent is 0 the batch is 0 (and passes the INT_MAX check); otherwise the
++  // extents are multiplied one at a time and the pair is refused (BatchCount) as soon as the next product would
++  // exceed INT_MAX, which keeps every intermediate product <= INT_MAX: no signed overflow is reachable. Values are
++  // unchanged wherever the old product did not overflow (the same extents, multiplied in the same order).
++  // Prior art: checked multiplication before overflow (CERT C INT32-C; GCC/Clang __builtin_mul_overflow, GCC 5,
++  // 2015); the division-before-multiplication bound is the INT32-C form. Ours: the zero-first rule and the placement.
++  for (int d = 0; d < nda - 2; ++d) p.out_shape.push_back(a.shape[d]);
+   p.out_shape.push_back(p.m);
+   p.out_shape.push_back(p.n);
+-  if (p.batch > INT_MAX)
+-    return refuse(p, MatmulOperandIssue::BatchCount,
+-                  "GEMM batch count above INT_MAX: " + std::to_string(p.batch), a, b, trans_b);
++  bool zero_leading = false;
++  for (int d = 0; d < nda - 2; ++d) zero_leading = zero_leading || a.shape[d] == 0;
++  p.batch = zero_leading ? 0 : 1;
++  for (int d = 0; d < nda - 2 && !zero_leading; ++d) {
++    const int64_t extent = a.shape[d];  // >= 1 here (no zero; NDArray extents are never negative)
++    if (extent > INT_MAX / p.batch)
++      return refuse(p, MatmulOperandIssue::BatchCount,
++                    "GEMM batch count above INT_MAX: the product of A's leading extents exceeds " +
++                        std::to_string(INT_MAX) + " at leading dimension " + std::to_string(d) + " (" +
++                        std::to_string(p.batch) + " x " + std::to_string(extent) + ")",
++                    a, b, trans_b);
++    p.batch *= extent;
++  }
+   // M2/M3: the batch classes. The stride rule is the forward's original one, (ndb == nda) -> B stride K*N, else 0,
+   // so every accepted pair keeps its pre-ENG4 strides (rank 2 x rank 2 is class (b) with an empty batch shape).
+   if (nda == ndb) {
+@@ -150,7 +162,15 @@ NDArray matmul(const NDArray& a, const NDArray& b, float alpha, bool trans_b) {
+   // result, or zeros when the contracted dimension is 0, the empty sum); the BLAS reference xGEMM quick-return
+   // (M = 0 or N = 0 returns; K = 0 with beta = 0 sets C = 0). Ours: placement after the predicate.
+   if (numel_of(plan.out_shape) == 0) return NDArray(plan.out_shape, a.dtype, a.device);  // 0 bytes: no allocation
+-  if (plan.k == 0) return NDArray::zeros(plan.out_shape, a.dtype, a.device);
++  if (plan.k == 0) {
++    NDArray zeros = NDArray::zeros(plan.out_shape, a.dtype, a.device);
++    // ENG4-F2 Y3 (ENG4R2-F03): NDArray::zeros discards cudaMemset's status; the fill is checked here with the
++    // engine's checked CUDA error handling, so a failed fill raises instead of returning unverified memory. Host
++    // outputs make no CUDA call (memset). Prior art: the CUDA runtime's sticky last-error API (cudaGetLastError);
++    // the engine's cuda_check_last convention (kernels.cu). Ours: the placement.
++    if (a.device.is_cuda()) cuda_check_last("matmul zero fill");
++    return zeros;
++  }
+ 
+   // trans_b: C = alpha * A @ B^T with B stored row-major (N, K) — consumes the
+   // operand without a materialized transpose copy (cuBLAS reads it via OP_T).
+diff --git a/tensor_cuda/src/ops.cpp b/tensor_cuda/src/ops.cpp
+index 1b7cd6a8b..0627f7072 100644
+--- a/tensor_cuda/src/ops.cpp
++++ b/tensor_cuda/src/ops.cpp
+@@ -847,6 +847,21 @@ Tensor matmul(const Tensor& a, const Tensor& b, float alpha, bool trans_b) {
+     // C = alpha * A @ op(B).  dA = alpha * g @ op(B)^T: trans_b flips, reusing
+     // the no-copy OP_T read.  dB: non-trans alpha*A^T@g, trans alpha*g^T@A.
+     a.v->accumulate_grad(matmul_backward(g, weight, alpha, !trans_b));
++    // ENG4-F2 Y2 (ENG4R2-F02): a shared B (classes a and c: unequal ranks) under an empty A batch (a zero leading
++    // extent) gets the gradient its forward implies, the empty sum over the batch, i.e. zeros of B's own shape and
++    // dtype. Before, the zero-batch dB intermediate reached reduce_to, whose reshape to B's nonempty shape raised.
++    // A's (empty) gradient is accumulated above as before; reduce_to is unchanged. The zero fill is checked like the
++    // forward's K = 0 fill. Prior art: the gradient of a broadcast operand is the sum over the broadcast axes, zero
++    // over an empty axis (reverse-mode autodiff; PyTorch's sum_to_size); NumPy's empty sum is 0. Ours: the placement.
++    const auto& a_shape = a.data().shape;
++    if (a.ndim() != b.ndim() &&
++        std::any_of(a_shape.begin(), a_shape.end() - 2, [](int64_t dim) { return dim == 0; })) {
++      const NDArray& b_data = b.data();
++      NDArray zero_b = NDArray::zeros(b_data.shape, b_data.dtype, b_data.device);
++      if (zero_b.device.is_cuda()) cuda_check_last("matmul backward zero gradient");
++      b.v->accumulate_grad(zero_b);
++      return;
++    }
+     // Shared B contributes one dB per A batch. The existing reduce_to path in
+     // accumulate_grad sums these in the engine's fixed reduction order.
+     // Reduce against the rank-2 view before restoring any singleton B axes.
+diff --git a/tensor_cuda/tests/test_eng4_matmul.py b/tensor_cuda/tests/test_eng4_matmul.py
+index 1ca76e71d..0a913dfc4 100644
+--- a/tensor_cuda/tests/test_eng4_matmul.py
++++ b/tensor_cuda/tests/test_eng4_matmul.py
+@@ -18,6 +18,13 @@ GPU tests (skipped with CUDA_VISIBLE_DEVICES empty; staged as GPU lines): the re
+ mixed host/CUDA device refusal with nonzero operands (m02's GPU line), the zero-size results on the device (m08's GPU
+ line: K = 0 must give zeros), and no output or gradient after a refusal.
+ 
++ENG4-F2 J1 (CPU): Y1, leading extents built by a metadata reshape of a zero-element tensor: a zero leading extent is
++batch 0 with no overflow (test_j1_y1_zero_leading_is_batch0*), and a nonzero leading product above INT_MAX is refused
++with the BatchCount message before any product could overflow, including naive products above 2^63
++(test_j1_y1_refuses_before_overflow, test_j1_y1_batchcount_boundary); Y2, a shared B under an empty A batch gets a
++zero gradient of its own shape (test_j1_y2_empty_batch_shared_b_zero_gradient, host float16/bfloat16; the float32
++backward needs CUDA and is in test_gpu_bwd0_zero_gradient, m10's GPU line).
++
+ This file is self-contained (ENG4-F1 X4): it imports only os, re, numpy, pytest and tensor_cuda, and reads no file.
+ 
+ Prior art: NumPy's matmul shape rule (numpy.matmul docs) for which pairs are meaningful; the cuBLAS strided-batched
+@@ -333,3 +340,145 @@ def test_gpu_zero_size_returns_numpy_result(case, dtype):
+     assert out.shape == want and r.dtype == dtype
+     assert out.size == 0 or not np.any(out.view(np.uint16 if out.dtype == np.float16 else np.uint32)), \
+         "zero check: K = 0 must give positive zeros"
++
++
++# ------------------------------------------------------------------------------------------- ENG4-F2 J1 (CPU)
++# Prior art: checked multiplication before overflow (CERT C INT32-C; __builtin_mul_overflow); the zero gradient of a
++# broadcast operand over an empty axis (reverse-mode autodiff, PyTorch's sum_to_size; NumPy's empty sum).
++def reshaped_empty(shape):
++    """A zero-element host tensor reshaped (metadata only) to `shape`, which holds a 0 somewhere. The constructor's
++    byte bound never sees these leading extents (ENG4R2-F01's route)."""
++    t = tc.zeros(0, device="cpu").reshape(list(shape))
++    assert list(t.shape) == list(shape)
++    return t
++
++
++# (leading extents, M, K): a zero leading extent next to huge ones; the output shape is leading + [M, N]
++Y1_ZERO_LEADING = [
++    ("2^32_2^32_0", (2 ** 32, 2 ** 32, 0), 2, 3),
++    ("0_2^32_2^32", (0, 2 ** 32, 2 ** 32), 2, 3),
++    ("2^62_0_2^62", (2 ** 62, 0, 2 ** 62), 2, 3),
++]
++
++
++@pytest.mark.parametrize("case", Y1_ZERO_LEADING, ids=[c[0] for c in Y1_ZERO_LEADING])
++def test_j1_y1_zero_leading_is_batch0(case):
++    """Y1: a zero leading extent is batch 0, accepted by the predicate with no overflow. These leading extents are
++    beyond the output's own byte bound (the NDArray constructor counts the zero as 1), so the accepted forward stops
++    at that inherited bound, naming exactly the predicate's output shape (A's batch + [M, N]); it is never refused
++    as a batch count."""
++    _, lead, m, k = case
++    a = reshaped_empty(lead + (m, k))
++    b = host((k, 4))
++    with pytest.raises(OverflowError, match=r"^NDArray: byte size overflows int64 for shape "
++                       + re.escape(shape_text(lead + (m, 4)))):
++        tc.matmul(a, b)
++
++
++@pytest.mark.parametrize("lead", [(2 ** 32, 0), (0, 2 ** 40), (2 ** 20, 0, 2 ** 20)], ids=["2^32_0", "0_2^40",
++                                                                                           "2^20_0_2^20"])
++def test_j1_y1_zero_leading_is_batch0_returns_empty(lead):
++    """Y1: where the output fits its byte bound, the batch-0 forward returns NumPy's empty result (no GEMM)."""
++    a = reshaped_empty(lead + (2, 3))
++    b = host((3, 4))
++    r = tc.matmul(a, b)
++    assert tuple(r.shape) == lead + (2, 4) and r.numpy().size == 0
++
++
++# leading extents with no zero whose naive int64 product exceeds 2^63 (it would overflow); M = 0 so the operand is
++# zero-element and can be built by a reshape
++Y1_OVER = [
++    ("2^32_2^32", (2 ** 32, 2 ** 32), 0),
++    ("2^16_2^48", (2 ** 16, 2 ** 48), 1),
++    ("3_2^62", (3, 2 ** 62), 1),
++    ("2^31-1_2^31-1_4", (2 ** 31 - 1, 2 ** 31 - 1, 4), 1),
++]
++
++
++@pytest.mark.parametrize("case", Y1_OVER, ids=[c[0] for c in Y1_OVER])
++def test_j1_y1_refuses_before_overflow(case):
++    """Y1: refused with the BatchCount message at the first leading dimension whose product would exceed INT_MAX,
++    before any product could overflow. Named assertion for m09_f2_naive_product (f2/MUTANTS_F2.json): the naive
++    product wraps (2^64 -> 0, 3 * 2^62 -> negative), so the mutant accepts and stops at the output byte bound."""
++    _, lead, at = case
++    naive = 1
++    for e in lead:
++        naive *= e
++    assert naive > 2 ** 63  # the witness's mathematical product does not fit int64
++    a = reshaped_empty(lead + (0, 3))
++    b = host((3, 4))
++    with pytest.raises(RuntimeError, match=r"^matmul refused: GEMM batch count above INT_MAX: the product of A's "
++                       r"leading extents exceeds 2147483647 at leading dimension " + str(at) + r" .*\("
++                       + names_both(lead + (0, 3), (3, 4))):
++        tc.matmul(a, b)
++
++
++Y1_BOUNDARY = [  # (leading, refused?) at a nonzero leading size; zero-element through M = 0
++    ((2 ** 16, 2 ** 15), True), ((2 ** 31,), True), ((2, 2 ** 30), True), ((2 ** 31 - 1,), False),
++    ((1, 2 ** 31 - 1), False), ((2 ** 15, 2 ** 16 - 1), False),
++]
++
++
++@pytest.mark.parametrize("case", Y1_BOUNDARY, ids=["x".join(map(str, c[0])) for c in Y1_BOUNDARY])
++def test_j1_y1_batchcount_boundary(case):
++    lead, refused = case
++    a = host(lead + (0, 3))
++    b = host((3, 4))
++    if refused:
++        with pytest.raises(RuntimeError, match=r"^matmul refused: GEMM batch count above INT_MAX"):
++            tc.matmul(a, b)
++    else:
++        r = tc.matmul(a, b)  # batch <= INT_MAX, M = 0: NumPy's empty result, no GEMM
++        assert tuple(r.shape) == lead + (0, 4)
++
++
++# Y2: (class, A shape, B shape without trans_b); the forward batch is 0 and B is shared (classes a and c)
++Y2_CASES = [("a", (0, 2, 3), (3, 4)), ("c", (0, 2, 3), (1, 1, 3, 4)), ("a_rank4", (2, 0, 2, 3), (3, 4)),
++            ("c_rank4_b3", (0, 3, 2, 3), (1, 3, 4))]
++Y2_CPU_DTYPES = ("float16", "bfloat16")  # the float32 backward requires CUDA operands (GPU test below)
++
++
++def bwd0(dtype, case, tb, device):
++    """Forward then backward of a batch-0 pair with a shared, nonempty, seeded B. Returns (a, b) after backward."""
++    _, sa, sb = case
++    sb = sb[:-2] + (sb[-1], sb[-2]) if tb else sb
++    rng = np.random.default_rng(4405)
++    a = tc.tensor(np.zeros(sa, np.float32), dtype=dtype, device=device, requires_grad=True)
++    b = tc.tensor(rng.standard_normal(sb).astype(np.float32), dtype=dtype, device=device, requires_grad=True)
++    out = tc.matmul(a, b, trans_b=tb)
++    assert out.numpy().size == 0
++    try:
++        out.backward()
++    except RuntimeError as e:
++        pytest.fail(f"zero-gradient check: a shared B under an empty batch must get a zero gradient, the backward "
++                    f"raised: {e}")
++    return a, b
++
++
++def check_zero_gradient(a, b, dtype):
++    assert a.grad is not None and tuple(a.grad.shape) == tuple(a.shape) and a.grad.numpy().size == 0
++    assert b.grad is not None, "zero-gradient check: B got no gradient"
++    gb = b.grad.numpy()
++    assert b.grad.dtype == dtype and tuple(b.grad.shape) == tuple(b.shape) and gb.size > 0
++    assert not np.any(gb.view(np.uint16 if gb.dtype == np.float16 else np.uint32)), \
++        "zero-gradient check: B's gradient must be positive zeros"
++
++
++@pytest.mark.parametrize("tb", [False, True], ids=["N", "T"])
++@pytest.mark.parametrize("case", Y2_CASES, ids=[c[0] for c in Y2_CASES])
++@pytest.mark.parametrize("dtype", Y2_CPU_DTYPES)
++def test_j1_y2_empty_batch_shared_b_zero_gradient(dtype, case, tb):
++    """Y2 on host operands (the lower-precision backward runs the forward's own zero-size path, no GEMM). Named
++    assertion for m10_f2_empty_batch_raise: the zero-gradient check."""
++    a, b = bwd0(dtype, case, tb, "cpu")
++    check_zero_gradient(a, b, dtype)
++
++
++@gpu
++@pytest.mark.parametrize("tb", [False, True], ids=["N", "T"])
++@pytest.mark.parametrize("case", Y2_CASES, ids=[c[0] for c in Y2_CASES])
++@pytest.mark.parametrize("dtype", ZERO_DTYPES)
++def test_gpu_bwd0_zero_gradient(dtype, case, tb):
++    """Y2 on CUDA operands, float32 included (m10's GPU line: it must fail on the zero-gradient check)."""
++    a, b = bwd0(dtype, case, tb, "cuda")
++    check_zero_gradient(a, b, dtype)
+--- /dev/null	2026-10-11 15:23:23.947999690 -0400
++++ scripts/eng4_f2_bwd0.py	2026-11-23 09:55:37.028326675 -0500
+@@ -0,0 +1,154 @@
++"""ENG4-F2 bwd0: the backward of a batch-0 forward with a shared, nonempty B (Y2's pairs), for one build.
++
++  python3 -B -P scripts/eng4_f2_bwd0.py run <outdir>          (GPU line bwd0_<arm>; one child process per case)
++  python3 -B -P scripts/eng4_f2_bwd0.py --case <i> <device>   (the child; prints one ENG4-ROW json line)
++  python3 -B -P scripts/eng4_f2_bwd0.py verdict <outdir> <B|F2>  (CPU, after the line: VERDICT.json)
++
++This script never reads, sets or clears CUDA_VISIBLE_DEVICES; the GPU line's environment decides the device.
++
++Cases: classes a and c with A's batch 0 (a zero leading extent) and B shared: A (0,2,3) x B (3,4); A (0,2,3) x
++B (1,1,3,4); A (2,0,2,3) x B (3,4); A (0,3,2,3) x B (1,3,4); trans_b both ways; float32, float16, bfloat16 (24
++cases). B holds seeded nonzero values (seed 4406 + case index); A is empty. Each child runs out = tc.matmul(a, b,
++trans_b); out.backward(), and records the forward's output shape and either the backward's exception or both
++gradients (shape, dtype, the bytes of .numpy() as hex; bfloat16 comes back as its exact float32 widening).
++
++Verdict (L09): F2 mode: every case must not raise; A's gradient has A's shape and no elements; B's gradient has B's
++dtype and shape (after those checks) and every element is a positive zero (by value, on the unsigned view). B mode:
++recorded only (the order asserts nothing about Build B beyond this record, L81).
++
++Prior art: the gradient of a broadcast operand is the sum over the broadcast axes, zero over an empty axis
++(reverse-mode autodiff; PyTorch's sum_to_size); NumPy's empty sum. Ours: the witness table.
++"""
++import hashlib
++import json
++import os
++import subprocess
++import sys
++
++import numpy as np
++
++CLASSES = [("a", (0, 2, 3), (3, 4)), ("c", (0, 2, 3), (1, 1, 3, 4)), ("a_rank4", (2, 0, 2, 3), (3, 4)),
++           ("c_rank4_b3", (0, 3, 2, 3), (1, 3, 4))]
++DTYPES = ("float32", "float16", "bfloat16")
++
++
++def cases():
++    out = []
++    for dtype in DTYPES:
++        for cls, sa, sb in CLASSES:
++            for tb in (False, True):
++                b = sb[:-2] + (sb[-1], sb[-2]) if tb else sb
++                out.append({"id": f"{cls}-{dtype}-{'T' if tb else 'N'}", "class": cls, "dtype": dtype, "trans_b": tb,
++                            "a": list(sa), "b": list(b)})
++    for i, c in enumerate(out):
++        c["seed"] = 4406 + i
++    return out
++
++
++def record_case(tc, c, device):
++    """Run one case on `device` with the imported tensor_cuda `tc`; return its record (no exception escapes)."""
++    rng = np.random.default_rng(c["seed"])
++    b_np = rng.standard_normal(c["b"]).astype(np.float32)
++    row = {"id": c["id"], "device": device, "b_input_sha256": hashlib.sha256(b_np.tobytes()).hexdigest()}
++    try:
++        a = tc.tensor(np.zeros(c["a"], np.float32), dtype=c["dtype"], device=device, requires_grad=True)
++        b = tc.tensor(b_np, dtype=c["dtype"], device=device, requires_grad=True)
++        out = tc.matmul(a, b, trans_b=c["trans_b"])
++        row["out_shape"] = list(out.shape)
++    except Exception as e:  # noqa: BLE001 (recorded)
++        row["forward_raised"] = {"type": type(e).__name__, "message": str(e)}
++        return row
++    try:
++        out.backward()
++    except Exception as e:  # noqa: BLE001 (recorded)
++        row["backward_raised"] = {"type": type(e).__name__, "message": str(e)}
++        return row
++    for name, t in (("a", a), ("b", b)):
++        if t.grad is None:
++            row[f"{name}_grad"] = None
++            continue
++        g = np.ascontiguousarray(t.grad.numpy())
++        row[f"{name}_grad"] = {"shape": list(t.grad.shape), "dtype": t.grad.dtype, "host_dtype": str(g.dtype),
++                               "elements": int(g.size), "hex": g.tobytes().hex(),
++                               "sha256": hashlib.sha256(g.tobytes()).hexdigest()}
++    return row
++
++
++def child(i, device):
++    import tensor_cuda as tc
++    row = record_case(tc, cases()[i], device)
++    try:
++        tc.synchronize()
++    except Exception as e:  # noqa: BLE001
++        row["synchronize_raised"] = str(e)
++    print("ENG4-ROW " + json.dumps(row), flush=True)
++
++
++def run(outdir):
++    os.makedirs(outdir)  # write-once
++    rows = []
++    for i, c in enumerate(cases()):
++        p = subprocess.run([sys.executable, "-B", "-P", os.path.abspath(__file__), "--case", str(i), "cuda"],
++                           capture_output=True, text=True, timeout=120)
++        row = dict(c, child_exit=p.returncode, stderr_tail=p.stderr[-1500:])
++        for line in p.stdout.splitlines():
++            if line.startswith("ENG4-ROW "):
++                row.update(json.loads(line[len("ENG4-ROW "):]))
++        rows.append(row)
++        print(c["id"], p.returncode, row.get("backward_raised") or ("grads" if "b_grad" in row else row.get(
++            "forward_raised")), flush=True)
++    import tensor_cuda as tc
++    rec = {"module": tc._C.__file__, "module_sha256": hashlib.sha256(open(tc._C.__file__, "rb").read()).hexdigest(),
++           "rows": rows}
++    with open(os.path.join(outdir, "bwd0.json"), "w") as f:
++        json.dump(rec, f, indent=1)
++    return 0
++
++
++def judge_row(r):
++    """F2 rule for one record; returns (verdict, reason)."""
++    if r.get("forward_raised") or r.get("backward_raised") or r.get("child_exit", 0) != 0:
++        return "FAIL", f"raised or died: {r.get('forward_raised') or r.get('backward_raised') or r.get('child_exit')}"
++    ga, gb = r.get("a_grad"), r.get("b_grad")
++    if ga is None or ga["shape"] != r["a"] or ga["elements"] != 0:
++        return "FAIL", "A's gradient is not A's empty gradient"
++    if gb is None:
++        return "FAIL", "B got no gradient"
++    if gb["dtype"] != r["dtype"] or gb["shape"] != r["b"]:
++        return "FAIL", f"B's gradient dtype/shape {gb['dtype']} {gb['shape']}"
++    raw = bytes.fromhex(gb["hex"])
++    if gb["elements"] == 0 or len(raw) == 0:
++        return "FAIL", "B's gradient is empty"
++    width = np.uint16 if gb["host_dtype"] == "float16" else np.uint32
++    if np.any(np.frombuffer(raw, dtype=width)):
++        return "FAIL", "B's gradient is not all positive zeros"
++    return "PASS", "zeros of B's shape and dtype; A's gradient empty"
++
++
++def verdict(outdir, mode):
++    rec = json.load(open(os.path.join(outdir, "bwd0.json")))
++    rows = []
++    for r in rec["rows"]:
++        if mode == "B":
++            rows.append({"id": r["id"], "verdict": "RECORDED",
++                         "result": r.get("backward_raised") or r.get("forward_raised") or
++                         {"b_grad": {k: v for k, v in (r.get("b_grad") or {}).items() if k != "hex"}}})
++        else:
++            v, why = judge_row(r)
++            rows.append({"id": r["id"], "verdict": v, "reason": why})
++    overall = "RECORDED" if mode == "B" else ("PASS" if rows and all(x["verdict"] == "PASS" for x in rows)
++                                              else "FAIL")
++    out = {"mode": mode, "module_sha256": rec["module_sha256"], "cases": len(rows), "verdict": overall, "rows": rows}
++    with open(os.path.join(outdir, "VERDICT.json"), "w") as f:
++        json.dump(out, f, indent=1)
++    print("bwd0", mode, overall, len(rows))
++    return 0 if overall in ("PASS", "RECORDED") else 1
++
++
++if __name__ == "__main__":
++    if sys.argv[1] == "--case":
++        child(int(sys.argv[2]), sys.argv[3])
++    elif sys.argv[1] == "run":
++        sys.exit(run(sys.argv[2]))
++    elif sys.argv[1] == "verdict":
++        sys.exit(verdict(sys.argv[2], sys.argv[3]))
+--- /dev/null	2026-10-11 15:23:23.947999690 -0400
++++ scripts/eng4_f2_g4_compare.py	2026-11-23 09:56:55.942309606 -0500
+@@ -0,0 +1,46 @@
++"""ENG4-F2 J3 compare (copy of scripts/eng4_f1_g4_compare.py reading artifacts/eng4/f2/g4 and f2/INTENDED_CHANGES_F2.json; listed IDs = its carried ENG4 M7 IDs plus its new_in_F2 IDs). ENG4 G4 compare: per test ID, Build B's outcome against Build E's (L09: outcomes per ID; logs and timings are
++never compared). Every difference must be an ID listed in artifacts/eng4/INTENDED_CHANGES.json (written before the
++after-run), else G4 fails.
++
++Usage: python3 -B -P scripts/eng4_g4_compare.py <series_B> <series_E> <out.json>
++       (series dirs under artifacts/eng4/g4/, each holding the merged outcomes.json of scripts/eng4_suite.py)
++
++Prior art: no prior art known to me beyond a keyed diff of two outcome maps (ENG3's eng3 G3 compare, this repo).
++"""
++import json
++import os
++import sys
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++
++
++def main():
++    sb, se, out = sys.argv[1], sys.argv[2], sys.argv[3]
++    ob = json.load(open(os.path.join(ROOT, "artifacts/eng4/f2/g4", sb, "outcomes.json")))
++    oe = json.load(open(os.path.join(ROOT, "artifacts/eng4/f2/g4", se, "outcomes.json")))
++    intended = json.load(open(os.path.join(ROOT, "artifacts/eng4/f2/INTENDED_CHANGES_F2.json")))["suite_ids"]
++    listed = set(intended["carried_from_ENG4"]["test_ids"]) | {t for c in intended["new_in_F2"] for t in c["test_ids"]}
++    b, e = ob["outcomes"], oe["outcomes"]
++    diffs = []
++    for tid in sorted(set(b) | set(e)):
++        if b.get(tid) != e.get(tid):
++            diffs.append({"id": tid, "B": b.get(tid), "E": e.get(tid), "intended": tid in listed})
++    coll = {"B": sorted(ob["collection_errors"]), "E": sorted(oe["collection_errors"])}
++    unexpected = [d for d in diffs if not d["intended"]]
++    ok = ob.get("complete", True) and oe.get("complete", True) and not unexpected and coll["B"] == coll["E"]
++    rec = {"B": sb, "E": se, "B_counts": ob["counts"], "E_counts": oe["counts"], "ids_B": len(b), "ids_E": len(e),
++           "complete": {"B": ob.get("complete"), "E": oe.get("complete")}, "collection_errors": coll,
++           "differences": diffs, "unexpected_differences": unexpected,
++           "intended_ids_status": {t: {"B": b.get(t), "E": e.get(t)} for t in sorted(listed)},
++           "worktree_writes_by_tests": {"B": ob.get("worktree_writes_by_tests"),
++                                        "E": oe.get("worktree_writes_by_tests")},
++           "verdict": "PASS" if ok else "FAIL"}
++    with open(out, "w") as f:
++        json.dump(rec, f, indent=1)
++    print("G4", sb, "vs", se, rec["verdict"], "ids", len(b), len(e), "differences", len(diffs), "unexpected",
++          len(unexpected))
++    return 0 if ok else 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+--- /dev/null	2026-10-11 15:23:23.947999690 -0400
++++ scripts/eng4_f2_gpu_line.py	2026-11-23 09:56:37.192078442 -0500
+@@ -0,0 +1,331 @@
++"""ENG4-F2 GPU lines (J5). ENG4's form and receipts (scripts/eng4_gpu_line.py, eng4_f1_gpu_line.py: both unchanged),
++with F2's names, arms and directories, and one addition, the L58 lease guard. The lead runs each line from the
++worktree root as
++
++    python3 -B -P scripts/eng4_f2_gpu_line.py run <line>
++
++(1) refuses before the lease if artifacts/eng4/f2/gpu/<line>/ exists or any module the line uses differs from its
++build receipt (L103); (2) runs, exactly as GPU_LINES_F2.json lists it,
++    forge-gpu-run --min <s> --max 540 --label eng4f2-<line> -- timeout <s>s python3 -B -P scripts/eng4_f2_gpu_line.py step <line>
++retrying unchanged after 300 s on forge exit 75/76 (nothing ran), at most 6 retries, re-checking the modules before
++every attempt; (3) writes RESULT.json: forge exit, inner exit (written by the step as its last act), timed_out (124,
++never a pass), attempts, the log's sha256 (L45).
++
++    python3 -B -P scripts/eng4_f2_gpu_line.py stage  -> artifacts/eng4/GPU_LINES_F2.json + one dry run per line
++                                                        (FORGE_GPU_DRY_RUN=1, expected 78), f2/gpu_dry/<line>.json
++
++L58 (CUDA_VISIBLE_DEVICES): `run` and `stage` pass the caller's environment to forge-gpu-run unchanged. The only
++site that removes the variable is step_env(), and `step` calls it only after lease_guard() has found forge-gpu-run
++among its ancestor processes (forge-gpu-run -> timeout -> this step); called any other way, `step` refuses with exit
++7 before it touches the environment or imports anything that could reach a device.
++
++Lines: bwd0_B and bwd0_F2 (scripts/eng4_f2_bwd0.py), g3_F2 (scripts/eng4_g3.py run, unchanged, F2 package; compared on
++the CPU afterwards with scripts/eng4_f1_g3_compare.py, unchanged, against the lead's artifacts/eng4/gpu/g3_B/g3),
++own_F2 (test_eng4_matmul.py on the F2 package), mut_m10_f2 (m10's GPU killing tests, one process each), g4_B_01..10
++and g4_F2_01..10 (scripts/eng4_f2_suite.py, series f2gpu_B / f2gpu_F2, 330 s test budget per part; each restores
++Build F2 in the worktree). No line sets RLIMIT_AS, ulimit -v or prlimit (L114).
++
++Prior art: timeout(1); the house forge-gpu-run contract (GW2/GW3); ENG3/ENG4/ENG4-F1 line runners (this repo). The
++ancestor-process guard is mine (Linux /proc/<pid>/stat and cmdline); no other prior art known to me.
++"""
++import datetime
++import hashlib
++import json
++import os
++import re
++import shlex
++import subprocess
++import sys
++import time
++import xml.etree.ElementTree as ET
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++SO = "_tensor_cuda.cpython-312-x86_64-linux-gnu.so"
++PY = ["python3", "-B", "-P"]
++GPU_DIR = os.path.join(ROOT, "artifacts/eng4/f2/gpu")
++
++
++def pkg(arm):
++    return os.path.join(ROOT, "tensor_cuda/build-eng4", arm, "pkg")
++
++
++def receipt_path(arm):
++    return os.path.join(ROOT, "artifacts/eng4/build/BUILD_B.json" if arm == "B"
++                        else f"artifacts/eng4/f2/build/BUILD_{arm}.json")
++
++
++def receipt_sha(arm):
++    return json.load(open(receipt_path(arm)))["module_sha256"]
++
++
++def mutant_gpu_tests(mid):
++    reg = json.load(open(os.path.join(ROOT, "artifacts/eng4/f2/MUTANTS_F2.json")))["mutants"][mid]
++    return [t for t in reg["killing_tests"] if "test_gpu_" in t]
++
++
++G4_PARTS = 10
++LINES = {  # line -> (min s, inner timeout s, arms, expected peak host bytes, description)
++    "bwd0_B": (120, 480, ["B"], 3 << 30, "J5 bwd0_B: production's backward on Y2's batch-0 shared-B pairs, recorded"),
++    "bwd0_F2": (120, 480, ["F2"], 3 << 30, "J5 bwd0_F2: the same pairs on F2 (B zero gradient, A empty gradient)"),
++    "g3_F2": (120, 480, ["F2"], 3 << 30, "J5 g3_F2: ENG4's seeded G3 grid on F2 (eng4_g3.py run, unchanged)"),
++    "own_F2": (120, 480, ["F2"], 3 << 30, "F2's own tests with the GPU visible (test_eng4_matmul.py)"),
++    "mut_m10_f2": (180, 480, ["m10_f2"], 3 << 30, "J4 m10 GPU line: the GPU zero-gradient tests on the m10 mutant"),
++}
++for _arm in ("B", "F2"):
++    for _i in range(1, G4_PARTS + 1):
++        LINES[f"g4_{_arm}_{_i:02d}"] = (480, 500, sorted({_arm, "F2"}), 6 << 30,
++                                        f"J5 G4 GPU half, Build {_arm}, part {_i} (series f2gpu_{_arm}; exits at "
++                                        "once when the series is complete)")
++
++
++def forge_argv(line):
++    mn, inner, _, _, _ = LINES[line]
++    return ["forge-gpu-run", "--min", str(mn), "--max", "540", "--label", f"eng4f2-{line}", "--",
++            "timeout", f"{inner}s"] + PY + ["scripts/eng4_f2_gpu_line.py", "step", line]
++
++
++def now():
++    return datetime.datetime.now(datetime.timezone.utc).isoformat()
++
++
++def sha(p):
++    h = hashlib.sha256()
++    with open(p, "rb") as f:
++        for c in iter(lambda: f.read(1 << 20), b""):
++            h.update(c)
++    return h.hexdigest()
++
++
++def dump(p, o):
++    with open(p, "w") as f:
++        json.dump(o, f, indent=1)
++
++
++def module_checks(line):
++    bad = {}
++    for arm in LINES[line][2]:
++        want = receipt_sha(arm)
++        paths = [os.path.join(ROOT, "tensor_cuda/build-eng4", arm, "module", SO)]
++        if os.path.isdir(pkg(arm)):
++            paths.append(os.path.join(pkg(arm), "tensor_cuda", SO))
++        for p in paths:
++            got = sha(p) if os.path.exists(p) else None
++            if got != want:
++                bad[p] = {"expected": want, "found": got}
++    return bad
++
++
++def write_once_paths(line):
++    paths = [f"artifacts/eng4/f2/gpu/{line}/"]
++    if line.startswith("g4_"):
++        arm = line.split("_")[1]
++        paths += [f"artifacts/eng4/f2/g4/f2gpu_{arm}/part_<n>/ (n = parts so far + 1)",
++                  f"/tmp/eng4_tmp/pt/f2gpu_{arm}_<n>/ (pytest basetemp)"]
++    elif line in ("own_F2", "mut_m10_f2"):
++        paths += ["/tmp/eng4_tmp/pt/<label>_<i>/ (pytest basetemp per test)"]
++    return paths
++
++
++def stage():
++    os.makedirs(os.path.join(ROOT, "artifacts/eng4/f2/gpu_dry"), exist_ok=True)
++    out_path = os.path.join(ROOT, "artifacts/eng4/GPU_LINES_F2.json")
++    if os.path.exists(out_path):
++        raise SystemExit("GPU_LINES_F2.json exists; each line is dry-run once")
++    rows = []
++    for line, (mn, inner, arms, peak, desc) in LINES.items():
++        argv = forge_argv(line)
++        bad = module_checks(line)
++        env = dict(os.environ, FORGE_GPU_DRY_RUN="1")  # the caller's environment otherwise unchanged (L58)
++        t0 = now()
++        p = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=120, cwd=ROOT)
++        dump(os.path.join(ROOT, "artifacts/eng4/f2/gpu_dry", f"{line}.json"),
++             {"line": line, "time": t0, "argv": argv, "exit": p.returncode, "stdout": p.stdout[-3000:],
++              "stderr": p.stderr[-3000:], "module_checks_failed": bad})
++        rows.append({"line": line, "description": desc,
++                     "lead_command": " ".join(PY + ["scripts/eng4_f2_gpu_line.py", "run", line]),
++                     "forge_command": " ".join(shlex.quote(a) for a in argv), "min_s": mn, "max_s": 540,
++                     "inner_timeout_s": inner, "modules": {a: receipt_sha(a) for a in arms},
++                     "expected_peak_host_bytes": peak, "write_once_paths": write_once_paths(line),
++                     "dry_run_exit": p.returncode, "dry_run_receipt": f"artifacts/eng4/f2/gpu_dry/{line}.json"})
++        print(line, "dry-run exit", p.returncode, "module check", "ok" if not bad else bad)
++    rec = {"written_utc": now(), "order": "orders/ENG4_F2_REV2_HARDENING.md J5", "cwd": "the worktree root",
++           "order_form": "forge-gpu-run --min <s> --max 540 --label eng4f2-<line> -- timeout <=500s ...",
++           "run_each_with": "python3 -B -P scripts/eng4_f2_gpu_line.py run <line>",
++           "scope": "the lead runs each line in a systemd scope with MemoryMax=12G and OOMPolicy=continue; no line "
++                    "sets RLIMIT_AS / ulimit -v / prlimit",
++           "L58_guard": "step refuses (exit 7) unless forge-gpu-run is an ancestor process; only then does it remove "
++                        "CUDA_VISIBLE_DEVICES from its children's environment",
++           "prerequisite": "g3_F2's compare reads the lead's ENG4 line g3_B (artifacts/eng4/gpu/g3_B/g3)",
++           "order_of_runs": "any; g4_<arm>_NN lines of one arm in number order (each continues its series); a g4 line "
++                            "whose series is complete exits 0 at once; if g4_<arm>_10 ends incomplete, rerun the same "
++                            "command after moving its write-once directory aside",
++           "after_lines_cpu": [
++               "python3 -B -P scripts/eng4_f1_g3_compare.py artifacts/eng4/gpu/g3_B/g3 "
++               "artifacts/eng4/f2/gpu/g3_F2/g3 artifacts/eng4/f2/G3_F2_COMPARE.json",
++               "python3 -B -P scripts/eng4_f2_bwd0.py verdict artifacts/eng4/f2/gpu/bwd0_B/bwd0 B",
++               "python3 -B -P scripts/eng4_f2_bwd0.py verdict artifacts/eng4/f2/gpu/bwd0_F2/bwd0 F2",
++               "python3 -B -P scripts/eng4_f2_g4_compare.py f2gpu_B f2gpu_F2 artifacts/eng4/f2/J3_GPU_COMPARE.json",
++               "python3 -B -P scripts/eng4_f2_mutant_results.py gpu"],
++           "lines": rows}
++    dump(out_path, rec)
++
++
++def run(line):
++    d = os.path.join(GPU_DIR, line)
++    if os.path.exists(d):
++        print("REFUSED:", d, "exists (write-once; move it aside to retry)")
++        return 5
++    bad = module_checks(line)
++    if bad:
++        print("REFUSED (L103) before the lease:", json.dumps(bad))
++        return 3
++    os.makedirs(d)
++    argv = forge_argv(line)
++    env = {k: v for k, v in os.environ.items() if k != "FORGE_GPU_DRY_RUN"}  # CUDA_VISIBLE_DEVICES untouched (L58)
++    env.setdefault("TMPDIR", "/tmp/eng4_tmp")
++    os.makedirs(env["TMPDIR"], exist_ok=True)
++    log = os.path.join(d, "run.log")
++    dump(os.path.join(d, "START.json"), {"time": now(), "argv": argv, "cwd": ROOT,
++                                         "modules": {a: receipt_sha(a) for a in LINES[line][2]}})
++    attempts = []
++    for attempt in range(7):
++        bad = module_checks(line)
++        if bad:
++            dump(os.path.join(d, "REFUSED.json"), {"time": now(), "attempt": attempt, "bad": bad})
++            return 3
++        t0 = now()
++        with open(log, "ab") as lf:
++            lf.write(f"\n=== attempt {attempt} {t0}\n".encode())
++            lf.flush()
++            rc = subprocess.run(argv, env=env, stdout=lf, stderr=subprocess.STDOUT, cwd=ROOT).returncode
++        attempts.append({"attempt": attempt, "start": t0, "end": now(), "forge_exit": rc})
++        dump(os.path.join(d, "ATTEMPTS.json"), attempts)
++        if rc not in (75, 76):
++            break
++        if attempt < 6:
++            time.sleep(300)
++    inner_path = os.path.join(d, "INNER_EXIT")
++    inner = int(open(inner_path).read().strip()) if os.path.exists(inner_path) else None
++    final = attempts[-1]["forge_exit"]
++    res = {"line": line, "end": now(), "forge_exit": final, "inner_exit": inner, "timed_out": final == 124,
++           "attempts": attempts, "log": os.path.relpath(log, ROOT), "log_sha256": sha(log),
++           "pass": final == 0 and inner == 0}
++    dump(os.path.join(d, "RESULT.json"), res)
++    print(json.dumps(res, indent=1))
++    return 0 if res["pass"] else 1
++
++
++# ------------------------------------------------------------------------------------------- inside the lease
++def lease_guard():
++    """True only if forge-gpu-run is an ancestor of this process (it runs timeout, which runs this step)."""
++    pid = os.getppid()
++    for _ in range(8):
++        try:
++            cmd = open(f"/proc/{pid}/cmdline", "rb").read().replace(b"\0", b" ").decode(errors="replace")
++            stat = open(f"/proc/{pid}/stat").read()
++        except OSError:
++            return False
++        if "forge-gpu-run" in cmd:
++            return True
++        pid = int(stat[stat.rindex(")") + 2:].split()[1])  # field 4: the parent pid
++        if pid <= 1:
++            return False
++    return False
++
++
++def step_env(arm):
++    """L58: the one site that removes CUDA_VISIBLE_DEVICES; reached only after lease_guard() in step()."""
++    env = dict(os.environ)
++    env["PYTHONPATH"] = pkg(arm)
++    env.pop("CUDA_VISIBLE_DEVICES", None)
++    return env
++
++
++def sh(cmd, out_path, env, timeout=None):
++    with open(out_path, "wb") as f:
++        p = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, env=env, cwd=ROOT, timeout=timeout)
++    return p.returncode
++
++
++def junit_case(path):
++    if not os.path.exists(path):
++        return "missing", ""
++    for case in ET.parse(path).getroot().iter("testcase"):
++        f, e = case.find("failure"), case.find("error")
++        if f is not None:
++            return "failed", f.get("message") or ""
++        if e is not None:
++            return "error", e.get("message") or ""
++        return ("skipped" if case.find("skipped") is not None else "passed"), ""
++    return "missing", ""
++
++
++def classify_kill(row, log_text, mid, named):
++    """Post-device verdict for one mutant test (also driven on constructed returns by eng4_f2_postdevice.py)."""
++    row["marker_seen"] = f"ENG4-MUTANT {mid} executed" in log_text
++    row["named_assertion_failed"] = row["outcome"] == "failed" and any(n in row["failure_message"] for n in named)
++    row["process_died"] = row["pytest_exit"] < 0 or (row["outcome"] == "missing" and row["pytest_exit"] != 0)
++    row["killed"] = row["named_assertion_failed"] or row["process_died"]
++    return row
++
++
++def step_pytest(env, d, ids, label):
++    rows = []
++    for i, tid in enumerate(ids):
++        junit = os.path.join(d, f"{label}_{i}.xml")
++        rc = sh(PY + ["-m", "pytest", "-q", "-p", "no:cacheprovider", "-rA", f"--basetemp=/tmp/eng4_tmp/pt/{label}_{i}",
++                      f"--junitxml={junit}", "-o", "junit_logging=all", tid], os.path.join(d, f"{label}_{i}.log"), env)
++        outcome, msg = junit_case(junit)
++        rows.append({"test": tid, "pytest_exit": rc, "outcome": outcome, "failure_message": msg[:600],
++                     "log": f"{label}_{i}.log", "junit": f"{label}_{i}.xml"})
++    return rows
++
++
++def step(line):
++    d = os.path.join(GPU_DIR, line)
++    if not lease_guard():
++        print("REFUSED (L58): step runs only under forge-gpu-run; nothing was run")
++        return 7
++    if not os.path.isdir(d):
++        print("REFUSED: no line directory (run the line through `run`)")
++        return 7
++    t0 = now()
++    if line in ("bwd0_B", "bwd0_F2"):
++        arm = line.split("_")[1]
++        rc = sh(PY + ["scripts/eng4_f2_bwd0.py", "run", os.path.join(d, "bwd0")], os.path.join(d, "bwd0.log"),
++                step_env(arm))
++    elif line == "g3_F2":
++        rc = sh(PY + ["scripts/eng4_g3.py", "run", os.path.join(d, "g3")], os.path.join(d, "g3.log"), step_env("F2"))
++    elif line == "own_F2":
++        rows = step_pytest(step_env("F2"), d, ["tensor_cuda/tests/test_eng4_matmul.py"], "own_F2")
++        dump(os.path.join(d, "OWN.json"), rows)
++        rc = rows[0]["pytest_exit"]
++    elif line == "mut_m10_f2":
++        mid = "m10_f2_empty_batch_raise"
++        rows = step_pytest(step_env("m10_f2"), d, mutant_gpu_tests(mid), "m10")
++        for r in rows:
++            classify_kill(r, open(os.path.join(d, r["log"]), errors="replace").read(), mid, ["zero-gradient check"])
++        dump(os.path.join(d, f"MUT_{mid}.json"), rows)
++        rc = 0
++    elif line.startswith("g4_"):
++        arm = line.split("_")[1]
++        env = step_env("F2")
++        env.pop("PYTHONPATH", None)  # the suite installs its build into the worktree and sets its own path
++        rc = sh(PY + ["scripts/eng4_f2_suite.py", f"f2gpu_{arm}", arm, "--budget", "330"],
++                os.path.join(d, "suite.log"), env)
++    else:
++        rc = 2
++    dump(os.path.join(d, "STEP.json"), {"line": line, "start": t0, "end": now(), "exit": rc})
++    with open(os.path.join(d, "INNER_EXIT"), "w") as f:
++        f.write(str(rc))
++    return rc
++
++
++if __name__ == "__main__":
++    cmd = sys.argv[1]
++    if cmd == "stage":
++        stage()
++    elif cmd == "run":
++        sys.exit(run(sys.argv[2]))
++    elif cmd == "step":
++        sys.exit(step(sys.argv[2]))
+--- /dev/null	2026-10-11 15:23:23.947999690 -0400
++++ scripts/eng4_f2_make_arms.py	2026-11-23 09:53:55.047012984 -0500
+@@ -0,0 +1,161 @@
++"""ENG4-F2 mutant arms (J4) and the frozen F2 package copies.
++
++  python3 -B -P scripts/eng4_f2_make_arms.py register <killing-test map json> -> artifacts/eng4/f2/MUTANTS_F2.json
++  python3 -B -P scripts/eng4_f2_make_arms.py tree <id>...   -> /tmp/eng4_src_<id>/tensor_cuda (F2 sources + one hunk)
++  python3 -B -P scripts/eng4_f2_make_arms.py pkg <arm> <package dir with the .py files>
++                                                            -> tensor_cuda/build-eng4/<arm>/pkg/tensor_cuda
++
++m09_f2_naive_product reverts Y1 to the plain product (ENG4/F1's code); m10_f2_empty_batch_raise reverts Y2 (the
++shared-B empty-batch zero gradient). Each hunk prints "ENG4-MUTANT <id> executed" to stderr every time its line runs
++(L41). Killing tests and named assertions come from the order (J4, L47).
++
++Prior art: mutation testing (DeMillo, Lipton and Sayward, 1978); ENG3/ENG4/ENG4-F1 arm makers (this repo).
++No other prior art known to me.
++"""
++import datetime
++import hashlib
++import json
++import os
++import shutil
++import subprocess
++import sys
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++TC = os.path.join(ROOT, "tensor_cuda")
++SO = "_tensor_cuda.cpython-312-x86_64-linux-gnu.so"
++F2 = os.path.join(ROOT, "artifacts/eng4/f2")
++
++
++def mark(i):
++    return 'std::fprintf(stderr, "ENG4-MUTANT %s executed\\n"); std::fflush(stderr); ' % i
++
++
++def sha(p):
++    h = hashlib.sha256()
++    with open(p, "rb") as f:
++        for c in iter(lambda: f.read(1 << 20), b""):
++            h.update(c)
++    return h.hexdigest()
++
++
++Y1_OLD = '''  bool zero_leading = false;
++  for (int d = 0; d < nda - 2; ++d) zero_leading = zero_leading || a.shape[d] == 0;
++  p.batch = zero_leading ? 0 : 1;
++  for (int d = 0; d < nda - 2 && !zero_leading; ++d) {
++    const int64_t extent = a.shape[d];  // >= 1 here (no zero; NDArray extents are never negative)
++    if (extent > INT_MAX / p.batch)
++      return refuse(p, MatmulOperandIssue::BatchCount,
++                    "GEMM batch count above INT_MAX: the product of A's leading extents exceeds " +
++                        std::to_string(INT_MAX) + " at leading dimension " + std::to_string(d) + " (" +
++                        std::to_string(p.batch) + " x " + std::to_string(extent) + ")",
++                    a, b, trans_b);
++    p.batch *= extent;
++  }
++'''
++Y1_NAIVE = '''  ''' + mark("m09_f2_naive_product") + '''
++  p.batch = 1;
++  for (int d = 0; d < nda - 2; ++d) p.batch *= a.shape[d];
++  if (p.batch > INT_MAX)
++    return refuse(p, MatmulOperandIssue::BatchCount,
++                  "GEMM batch count above INT_MAX: " + std::to_string(p.batch), a, b, trans_b);
++'''
++Y2_OLD = '''    if (a.ndim() != b.ndim() &&
++        std::any_of(a_shape.begin(), a_shape.end() - 2, [](int64_t dim) { return dim == 0; })) {
++'''
++Y2_NEW = '''    ''' + mark("m10_f2_empty_batch_raise") + '''
++    if (false && a.ndim() != b.ndim() &&
++        std::any_of(a_shape.begin(), a_shape.end() - 2, [](int64_t dim) { return dim == 0; })) {
++'''
++HUNKS = {
++    "m09_f2_naive_product": {
++        "file": "src/matmul.cu", "old": Y1_OLD, "new": Y1_NAIVE,
++        "what": "Y1 reverted: the plain signed product of A's leading extents, then the INT_MAX check (ENG4/F1's code)",
++        "order_source": "J4 m09 (J1, the 2^32 x 2^32 x 0 witness)",
++        "named_assertion": "test_j1_y1_refuses_before_overflow: pytest.raises(RuntimeError, match='^matmul refused: "
++                           "GEMM batch count above INT_MAX: the product of A's leading extents exceeds 2147483647 at "
++                           "leading dimension <d> ...') -- the naive product wraps (2^64 -> 0; 3 * 2^62 -> negative), "
++                           "the mutant accepts and the call stops at the output byte bound (OverflowError): 'Regex "
++                           "pattern did not match' or a non-RuntimeError exception (pytest reports the OverflowError "
++                           "as the failure).",
++        "unkillable_witness": "the order's 2^32 x 2^32 x 0 witness (test_j1_y1_zero_leading_is_batch0): the naive "
++                              "product of a list holding a 0 is also 0 (2^32 * 2^32 wraps to 0 in practice, a signed "
++                              "overflow, then * 0), so its assertion (accepted as batch 0, stopping at the output "
++                              "byte bound) holds for the mutant too. Reading that shows the overflow: the mutant "
++                              "multiplies 2^32 * 2^32 in int64 before reaching the 0 (signed overflow, undefined "
++                              "behaviour); the over-2^63 witnesses are the ones a test can see.",
++    },
++    "m10_f2_empty_batch_raise": {
++        "file": "src/ops.cpp", "old": Y2_OLD, "new": Y2_NEW,
++        "what": "Y2 reverted: a shared B under an empty batch goes back to reduce_to, which raises",
++        "order_source": "J4 m10 (a staged GPU line; it must fail on the zero-gradient check)",
++        "named_assertion": "the zero-gradient check of test_j1_y2_empty_batch_shared_b_zero_gradient (CPU, host "
++                           "float16/bfloat16) and test_gpu_bwd0_zero_gradient (GPU line mut_m10_f2, float32 included): "
++                           "pytest.fail('zero-gradient check: ... the backward raised: reshape: element count "
++                           "mismatch')",
++    },
++}
++
++
++def register(map_path):
++    out = os.path.join(F2, "MUTANTS_F2.json")
++    if os.path.exists(out):
++        raise SystemExit("MUTANTS_F2.json exists; registrations are write-once")
++    tests = json.load(open(map_path))
++    for mid, m in HUNKS.items():
++        assert open(os.path.join(TC, m["file"])).read().count(m["old"]) == 1, mid
++        m["killing_tests"] = tests[mid]
++        assert m["killing_tests"], mid
++    rec = {"written_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
++           "rule": "each mutant must fail its named assertion in each killing test (order J4, L41, L47); each killing "
++                   "test's captured output must show the mutated line ran",
++           "base": {"tree": "Build F2 sources", "matmul.cu": sha(os.path.join(TC, "src/matmul.cu")),
++                    "ops.cpp": sha(os.path.join(TC, "src/ops.cpp"))},
++           "mutants": HUNKS}
++    with open(out, "w") as f:
++        json.dump(rec, f, indent=1)
++    print("registered", out, sha(out))
++
++
++def tree(ids):
++    os.makedirs(os.path.join(F2, "mutants"), exist_ok=True)
++    for mid in ids:
++        m = HUNKS[mid]
++        dst = f"/tmp/eng4_src_{mid}/tensor_cuda"
++        if os.path.exists(dst):
++            raise SystemExit(f"{dst} exists; refusing to overwrite (no deletes)")
++        os.makedirs(dst)
++        shutil.copy2(os.path.join(TC, "CMakeLists.txt"), dst)
++        for d in ("src", "include"):
++            shutil.copytree(os.path.join(TC, d), os.path.join(dst, d))
++        shutil.copytree(os.path.join(TC, "tensor_cuda"), os.path.join(dst, "tensor_cuda"),
++                        ignore=shutil.ignore_patterns("*.so", "__pycache__", "*.eng4tmp"))
++        path = os.path.join(dst, m["file"])
++        s = open(path).read()
++        assert s.count(m["old"]) == 1, mid
++        open(path, "w").write(s.replace(m["old"], m["new"]))
++        r = subprocess.run(["diff", "-u", os.path.join(TC, m["file"]), path], capture_output=True, text=True)
++        with open(os.path.join(F2, "mutants", f"{mid}.diff"), "w") as f:
++            f.write(r.stdout)
++        print(mid, "->", dst, "diff lines", len(r.stdout.splitlines()))
++
++
++def pkg(arm, src_pkg):
++    dst = os.path.join(TC, "build-eng4", arm, "pkg", "tensor_cuda")
++    if os.path.exists(dst):
++        raise SystemExit(f"{dst} exists; refusing to overwrite (no deletes)")
++    shutil.copytree(src_pkg, dst, ignore=shutil.ignore_patterns("__pycache__", "*.so", "*.eng4tmp"))
++    mod = os.path.join(TC, "build-eng4", arm, "module", SO)
++    want = json.load(open(os.path.join(F2, "build", f"BUILD_{arm}.json")))["module_sha256"]
++    assert sha(mod) == want, (arm, "module copy differs from its build receipt")
++    shutil.copy2(mod, os.path.join(dst, SO))
++    files = {os.path.relpath(os.path.join(d, n), dst): sha(os.path.join(d, n))
++             for d, _, ns in os.walk(dst) for n in sorted(ns)}
++    rec = {"arm": arm, "source": src_pkg, "pkg": dst, "module_sha256": sha(os.path.join(dst, SO)), "files": files}
++    with open(os.path.join(TC, "build-eng4", arm, "pkg.json"), "w") as f:
++        json.dump(rec, f, indent=1)
++    print(arm, "pkg", dst, rec["module_sha256"])
++
++
++if __name__ == "__main__":
++    {"register": lambda: register(sys.argv[2]), "tree": lambda: tree(sys.argv[2:]),
++     "pkg": lambda: pkg(sys.argv[2], sys.argv[3])}[sys.argv[1]]()
+--- /dev/null	2026-10-11 15:23:23.947999690 -0400
++++ scripts/eng4_f2_mutant_results.py	2026-11-23 10:10:29.584916762 -0500
+@@ -0,0 +1,106 @@
++"""ENG4-F2 J4 mutant runs -> artifacts/eng4/f2/MUTANT_RESULTS_F2.json (copy of scripts/eng4_f1_mutant_results.py with F2 paths, arms m09_f2/m10_f2 and named assertions).
++
++  CUDA_VISIBLE_DEVICES= python3 -B -P scripts/eng4_f2_mutant_results.py cpu   -> every CPU killing test, per mutant
++  python3 -B -P scripts/eng4_f1_mutant_results.py gpu                         -> adds the GPU lines mut_m02_f1, mut_m08
++
++CPU: each killing test (artifacts/eng4/f1/MUTANTS_F1.json, the non-GPU ones) runs in its own pytest process against
++the mutant's package (/tmp/eng4_src_<id>/tensor_cuda; module checked against f2/build/BUILD_<arm>.json), CUDA hidden.
++Killed = the test failed on its NAMED assertion (the registered failure text: pytest.raises 'Regex pattern did not
++match' / 'DID NOT RAISE', or m08's 'zero check') AND its captured output shows 'ENG4-MUTANT <id> executed' (L41).
++
++Prior art: mutation testing (DeMillo, Lipton and Sayward, 1978); ENG4's eng4_mutant_results.py (this repo).
++No other prior art known to me.
++"""
++import datetime
++import hashlib
++import json
++import os
++import subprocess
++import sys
++import xml.etree.ElementTree as ET
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++SO = "_tensor_cuda.cpython-312-x86_64-linux-gnu.so"
++F1 = os.path.join(ROOT, "artifacts/eng4/f2")
++OUT = os.path.join(F1, "MUTANT_RESULTS_F2.json")
++NAMED = {"m10_f2_empty_batch_raise": ["zero-gradient check"],
++         # as registered in MUTANTS_F2.json before any run: the RuntimeError regex fails, or the mutant's
++         # OverflowError (the output byte bound) escapes pytest.raises(RuntimeError) and is the failure
++         "m09_f2_naive_product": ["Regex pattern did not match", "DID NOT RAISE",
++                                  "OverflowError: NDArray: byte size overflows int64"]}
++ARM = {"m09_f2_naive_product": "m09_f2", "m10_f2_empty_batch_raise": "m10_f2"}
++DEFAULT_NAMED = ["Regex pattern did not match", "DID NOT RAISE"]
++
++
++def sha(p):
++    with open(p, "rb") as f:
++        return hashlib.sha256(f.read()).hexdigest()
++
++
++def junit_case(path):
++    if not os.path.exists(path):
++        return {"outcome": "missing", "message": "", "captured": ""}
++    for tc in ET.parse(path).getroot().iter("testcase"):
++        f, e, s = tc.find("failure"), tc.find("error"), tc.find("skipped")
++        out = "".join((x.text or "") for x in tc.findall("system-err")) + "".join(
++            (x.text or "") for x in tc.findall("system-out"))
++        node = f if f is not None else e
++        return {"outcome": "failed" if f is not None else "error" if e is not None else
++                "skipped" if s is not None else "passed",
++                "message": (node.get("message") or "") if node is not None else "", "captured": out}
++    return {"outcome": "missing", "message": "", "captured": ""}
++
++
++def cpu():
++    reg = json.load(open(os.path.join(F1, "MUTANTS_F2.json")))
++    res = {"written_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
++           "MUTANTS_F2.json_sha256": sha(os.path.join(F1, "MUTANTS_F2.json")), "mutants": {}}
++    d = os.path.join(F1, "mutants", "runs")
++    os.makedirs(d, exist_ok=True)
++    for mid, m in reg["mutants"].items():
++        pkg = f"/tmp/eng4_src_{mid}/tensor_cuda"
++        want = json.load(open(os.path.join(F1, "build", f"BUILD_{ARM[mid]}.json")))["module_sha256"]
++        got = sha(os.path.join(pkg, "tensor_cuda", SO))
++        assert got == want, (mid, got, want)
++        named = NAMED.get(mid, DEFAULT_NAMED)
++        rows = []
++        for i, tid in enumerate(t for t in m["killing_tests"] if "test_gpu_" not in t):
++            junit = os.path.join(d, f"{mid}_{i}.xml")
++            env = dict(os.environ, PYTHONPATH=pkg, CUDA_VISIBLE_DEVICES="", TMPDIR="/tmp/eng4_tmp")
++            p = subprocess.run(["python3", "-B", "-P", "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rA",
++                                f"--basetemp=/tmp/eng4_tmp/pt/f2mut_{mid}_{i}", f"--junitxml={junit}",
++                                "-o", "junit_logging=all", os.path.join(ROOT, tid)],
++                               capture_output=True, text=True, timeout=600, cwd=ROOT, env=env)
++            with open(os.path.join(d, f"{mid}_{i}.log"), "w") as f:
++                f.write(p.stdout + p.stderr)
++            c = junit_case(junit)
++            is_named = c["outcome"] == "failed" and any(n in c["message"] for n in named)
++            marker = f"ENG4-MUTANT {mid} executed" in c["captured"]
++            rows.append({"test": tid, "pytest_exit": p.returncode, "outcome": c["outcome"],
++                         "failure_message": c["message"][:600], "named_assertion_failed": is_named,
++                         "mutated_line_executed_in_test": marker, "killed": is_named and marker,
++                         "junit": os.path.relpath(junit, ROOT)})
++        res["mutants"][mid] = {"module_sha256": got, "named_assertion": m["named_assertion"], "cpu_rows": rows,
++                               "cpu_killing_tests": len(rows),
++                               "killed_on_cpu": bool(rows) and all(r["killed"] for r in rows)}
++        print(mid, len(rows), "killed" if res["mutants"][mid]["killed_on_cpu"] else
++              [(r["test"].split("::")[1], r["outcome"], r["named_assertion_failed"], r["mutated_line_executed_in_test"])
++               for r in rows if not r["killed"]][:4])
++    with open(OUT, "w") as f:
++        json.dump(res, f, indent=1)
++
++
++def gpu():
++    res = json.load(open(OUT))
++    for line, mid in (("mut_m10_f2", "m10_f2_empty_batch_raise"),):
++        p = os.path.join(F1, "gpu", line, f"MUT_{mid}.json")
++        rows = json.load(open(p)) if os.path.exists(p) else None
++        res["mutants"][mid]["gpu_line"] = {"line": line, "rows": rows,
++                                           "killed": bool(rows) and all(r["killed"] for r in rows)}
++        print(mid, res["mutants"][mid]["gpu_line"]["killed"])
++    with open(OUT, "w") as f:
++        json.dump(res, f, indent=1)
++
++
++if __name__ == "__main__":
++    {"cpu": cpu, "gpu": gpu}[sys.argv[1]]()
+--- /dev/null	2026-10-11 15:23:23.947999690 -0400
++++ scripts/eng4_f2_postdevice.py	2026-11-23 09:58:11.952232927 -0500
+@@ -0,0 +1,270 @@
++"""ENG4-F2 L48: drive every post-device step of g3_F2, bwd0_B, bwd0_F2 and mut_m10_f2 (readback, comparators,
++verdict code) on constructed returns, on the CPU, and write artifacts/eng4/f2/POST_DEVICE_STEPS.json (each step with
++its expected and observed terminal label).
++
++  CUDA_VISIBLE_DEVICES= PYTHONPATH=<F2 package parent> python3 -B -P scripts/eng4_f2_postdevice.py
++
++Nothing here runs a staged line or its step function, and nothing reads, sets or clears CUDA_VISIBLE_DEVICES (L58):
++the comparators run as the lines' after-commands do (scripts/eng4_f1_g3_compare.py, unchanged, as a child process),
++the bwd0 verdict and recorder run in process (record_case on host operands only), and the mutant kill classifier is
++imported from scripts/eng4_f2_gpu_line.py as a function (classify_kill, junit_case).
++
++Prior art: no prior art known to me beyond negative-control testing of a comparator (each verdict path driven by a
++constructed input that must reach it).
++"""
++import copy
++import hashlib
++import importlib.util
++import json
++import os
++import subprocess
++import sys
++
++import numpy as np
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++TMP = "/tmp/eng4_tmp/f2_postdevice"
++
++
++def load(name, rel):
++    spec = importlib.util.spec_from_file_location(name, os.path.join(ROOT, rel))
++    m = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(m)
++    return m
++
++
++g3 = load("eng4_g3", "scripts/eng4_g3.py")
++bwd0 = load("eng4_f2_bwd0", "scripts/eng4_f2_bwd0.py")
++line = load("eng4_f2_gpu_line", "scripts/eng4_f2_gpu_line.py")
++STEPS = []
++
++
++def step(sid, line_name, what, expected, observed, detail=None):
++    STEPS.append({"step": sid, "line": line_name, "what": what, "expected": expected, "observed": observed,
++                  "ok": expected == observed, "detail": detail})
++    print(("ok " if expected == observed else "MISMATCH ") + sid, expected, observed, flush=True)
++
++
++# ---------------------------------------------------------------- readback (the engine's .numpy() per dtype)
++def readback():
++    import tensor_cuda as tc
++    for dtype in ("float32", "float16", "bfloat16"):
++        for shape in ((3, 17, 19), (0, 17, 19), (3, 0, 19), (4, 64, 96)):
++            t = tc.tensor(np.ones(shape, np.float32), dtype=dtype, device="cpu")
++            x = t.numpy()
++            want = np.float16 if dtype == "float16" else np.float32
++            ok = x.dtype == want and x.shape == shape
++            step(f"readback_{dtype}_{'x'.join(map(str, shape))}", "g3_F2/bwd0_*",
++                 "host tensor .numpy(): float16 stays float16, float32 and bfloat16 come back as float32 (the "
++                 "widening the comparators expect), shape kept, empty included", "PASS", "PASS" if ok else "FAIL",
++                 {"dtype": str(x.dtype), "shape": list(x.shape)})
++
++
++# ---------------------------------------------------------------- g3 compare (eng4_f1_g3_compare.py, unchanged)
++def g3_dirs(tag, mutate=None):
++    """Constructed B and F2 run directories with the real grid's cells: nonzero cells get seeded nonconstant values
++    (identical on both sides), zero-size cells get NumPy's result on F2 and nonzero garbage on B (B's K = 0 output
++    was unwritten memory)."""
++    base = os.path.join(TMP, "g3", tag)
++    out = {}
++    for side in ("B", "F2"):
++        d = os.path.join(base, side)
++        os.makedirs(d, exist_ok=True)
++        cells, arrs = [], {}
++        for c in g3.cells():
++            a_s, b_s = c["a"], c["b"]
++            b_log = tuple(b_s[:-2]) + ((b_s[-1], b_s[-2]) if c["trans_b"] else tuple(b_s[-2:]))
++            if c["class"] in ("a", "b"):
++                shape = np.matmul(np.zeros(a_s, np.float32), np.zeros(b_log, np.float32)).shape
++            else:
++                shape = tuple(a_s[:-1]) + (b_log[-1],)
++            host = np.float16 if c["dtype"] == "float16" else np.float32
++            rng = np.random.default_rng(c["seed"])
++            if not c["zero_size"]:
++                x = rng.standard_normal(shape).astype(host)
++            elif side == "B":
++                x = rng.standard_normal(shape).astype(host)  # unwritten memory stand-in
++            else:
++                x = np.zeros(shape, host)
++            arrs[c["id"]] = np.ascontiguousarray(x)
++            row = dict(c, a=list(a_s), b=list(b_s), a_sha256="in", b_sha256="in", tensor_dtype=c["dtype"],
++                       out_shape=list(shape), host_dtype=str(x.dtype))
++            if c["zero_size"]:
++                row["numpy_matmul_shape"] = list(np.matmul(np.zeros(a_s, np.float32),
++                                                           np.zeros(b_log, np.float32)).shape)
++            cells.append(row)
++        if mutate and side == "F2":
++            mutate(cells, arrs)
++        np.savez(os.path.join(d, "outputs.npz"), **arrs)
++        json.dump({"module_sha256": f"constructed-{side}", "cells": cells}, open(os.path.join(d, "manifest.json"), "w"))
++        out[side] = d
++    return out
++
++
++def run_g3_compare(tag, mutate=None):
++    d = g3_dirs(tag, mutate)
++    res = os.path.join(TMP, "g3", tag, "compare.json")
++    p = subprocess.run([sys.executable, "-B", "-P", os.path.join(ROOT, "scripts/eng4_f1_g3_compare.py"), d["B"],
++                        d["F2"], res], capture_output=True, text=True, timeout=300)
++    rec = json.load(open(res))
++    return rec["verdict"], rec["failed"], p.returncode
++
++
++def g3_steps():
++    largest = "a_medium-bfloat16-T-a0.5"
++
++    def flip(cells, arrs):
++        x = arrs[largest].copy()
++        x.reshape(-1).view(np.uint32)[0] ^= 1
++        arrs[largest] = x
++
++    def k0_nonzero(cells, arrs):
++        x = arrs["b_K0-float16"].copy()
++        x.reshape(-1)[0] = np.float16(1.0)
++        arrs["b_K0-float16"] = x
++
++    def empty_shape(cells, arrs):
++        arrs["c_batch0-bfloat16"] = np.zeros((0, 17, 18), np.float32)
++
++    def constant(cells, arrs):
++        arrs["b_rank2-float32-N-a1.0"] = np.full_like(arrs["b_rank2-float32-N-a1.0"], 2.0)
++
++    def dtype(cells, arrs):
++        arrs["a_small-float16-N-a1.0"] = arrs["a_small-float16-N-a1.0"].astype(np.float32)
++
++    cases = [("g3_identical_with_numpy_zero_cells", None, "PASS", []),
++             ("g3_bitflip_largest_cell", flip, "FAIL", [largest]),
++             ("g3_k0_cell_nonzero", k0_nonzero, "FAIL", ["b_K0-float16"]),
++             ("g3_empty_cell_wrong_shape", empty_shape, "FAIL", ["c_batch0-bfloat16"]),
++             ("g3_nonzero_cell_constant_L19", constant, "FAIL", ["b_rank2-float32-N-a1.0"]),
++             ("g3_host_dtype_mismatch", dtype, "FAIL", ["a_small-float16-N-a1.0"])]
++    for sid, mut, want, want_failed in cases:
++        verdict, failed, rc = run_g3_compare(sid, mut)
++        observed = verdict if (verdict == "PASS" and not failed) or failed == want_failed else f"{verdict}:{failed}"
++        step(sid, "g3_F2", "scripts/eng4_f1_g3_compare.py on constructed B/F2 runs (123 cells: zero-size, empty and "
++             "the largest cells included)", want, observed, {"failed": failed, "exit": rc})
++
++
++# ---------------------------------------------------------------- bwd0 recorder and verdict
++def bwd0_steps():
++    import tensor_cuda as tc
++    rows = []
++    for c in bwd0.cases():
++        r = dict(c, child_exit=0)
++        r.update(bwd0.record_case(tc, c, "cpu"))
++        rows.append(r)
++    host_lp = [r for r in rows if r["dtype"] != "float32"]
++    host_f32 = [r for r in rows if r["dtype"] == "float32"]
++    v = sorted({bwd0.judge_row(r)[0] for r in host_lp})
++    step("bwd0_record_and_judge_host_f16_bf16", "bwd0_F2", "record_case on host float16/bfloat16 (the real F2 "
++         "backward, readback of both gradients) then judge_row: every case zeros of B's shape, A empty",
++         "PASS", v[0] if len(v) == 1 else str(v), {"cases": len(host_lp)})
++    v = sorted({bwd0.judge_row(r)[0] for r in host_f32})
++    step("bwd0_record_and_judge_host_f32_raise_path", "bwd0_F2", "record_case on host float32: the fp32 backward "
++         "needs CUDA operands, so the raise branch of the recorder and judge_row's FAIL on a raise are driven",
++         "FAIL", v[0] if len(v) == 1 else str(v),
++         {"cases": len(host_f32), "message": host_f32[0].get("backward_raised")})
++
++    def verdict_of(tag, rows_, mode):
++        d = os.path.join(TMP, "bwd0", tag)
++        os.makedirs(d, exist_ok=True)
++        json.dump({"module_sha256": "constructed", "rows": rows_}, open(os.path.join(d, "bwd0.json"), "w"))
++        bwd0.verdict(d, mode)
++        return json.load(open(os.path.join(d, "VERDICT.json")))["verdict"]
++
++    good = []
++    for c in bwd0.cases():  # constructed device returns: zeros of B's shape and dtype, A empty
++        host = np.float16 if c["dtype"] == "float16" else np.float32
++        gb = np.zeros(c["b"], host)
++        good.append(dict(c, child_exit=0, out_shape=c["a"][:-1] + [c["b"][-2] if c["trans_b"] else c["b"][-1]],
++                         a_grad={"shape": c["a"], "dtype": c["dtype"], "host_dtype": str(np.dtype(host)),
++                                 "elements": 0, "hex": "", "sha256": hashlib.sha256(b"").hexdigest()},
++                         b_grad={"shape": c["b"], "dtype": c["dtype"], "host_dtype": str(np.dtype(host)),
++                                 "elements": int(gb.size), "hex": gb.tobytes().hex(),
++                                 "sha256": hashlib.sha256(gb.tobytes()).hexdigest()}))
++    step("bwd0_verdict_F2_all_zero", "bwd0_F2", "verdict F2 on 24 constructed zero-gradient returns (largest B "
++         "included)", "PASS", verdict_of("all_zero", good, "F2"))
++    bad = copy.deepcopy(good)
++    raw = bytearray(bytes.fromhex(bad[5]["b_grad"]["hex"]))
++    raw[0] ^= 1
++    bad[5]["b_grad"]["hex"] = raw.hex()
++    step("bwd0_verdict_F2_one_bit", "bwd0_F2", "one nonzero bit in one B gradient", "FAIL",
++         verdict_of("one_bit", bad, "F2"))
++    bad = copy.deepcopy(good)
++    for k in ("a_grad", "b_grad"):
++        bad[0].pop(k)
++    bad[0]["backward_raised"] = {"type": "RuntimeError", "message": "reshape: element count mismatch"}
++    step("bwd0_verdict_F2_raised", "bwd0_F2", "a backward that raised (Build B / m10 shape)", "FAIL",
++         verdict_of("raised", bad, "F2"))
++    bad = copy.deepcopy(good)
++    bad[1]["b_grad"]["shape"] = [3, 4, 1]
++    step("bwd0_verdict_F2_wrong_shape", "bwd0_F2", "B gradient with the wrong shape", "FAIL",
++         verdict_of("wrong_shape", bad, "F2"))
++    bad = copy.deepcopy(good)
++    bad[2]["b_grad"]["dtype"] = "float32" if bad[2]["dtype"] != "float32" else "float16"
++    step("bwd0_verdict_F2_wrong_dtype", "bwd0_F2", "B gradient with the wrong dtype", "FAIL",
++         verdict_of("wrong_dtype", bad, "F2"))
++    bad = copy.deepcopy(good)
++    bad[3]["b_grad"].update(elements=0, hex="")
++    step("bwd0_verdict_F2_empty_b_grad", "bwd0_F2", "an empty B gradient", "FAIL", verdict_of("empty_b", bad, "F2"))
++    bad = copy.deepcopy(good)
++    bad[4]["child_exit"] = -11
++    step("bwd0_verdict_F2_child_died", "bwd0_F2", "a child process that died", "FAIL",
++         verdict_of("died", bad, "F2"))
++    mixed = copy.deepcopy(good)
++    mixed[0].pop("b_grad")
++    mixed[0]["backward_raised"] = {"type": "RuntimeError", "message": "reshape: element count mismatch"}
++    step("bwd0_verdict_B_records", "bwd0_B", "verdict B records every case (raised or gradients), no gate",
++         "RECORDED", verdict_of("B_mode", mixed, "B"))
++
++
++# ---------------------------------------------------------------- mut_m10_f2 kill classification
++def mut_steps():
++    d = os.path.join(TMP, "mut")
++    os.makedirs(d, exist_ok=True)
++    mid = "m10_f2_empty_batch_raise"
++    junits = {
++        "failed_named": '<testsuites><testsuite><testcase name="t"><failure message="Failed: zero-gradient check: a '
++                        'shared B ... raised: reshape: element count mismatch"/></testcase></testsuite></testsuites>',
++        "failed_other": '<testsuites><testsuite><testcase name="t"><failure message="AssertionError: other"/>'
++                        '</testcase></testsuite></testsuites>',
++        "passed": '<testsuites><testsuite><testcase name="t"/></testsuite></testsuites>',
++        "skipped": '<testsuites><testsuite><testcase name="t"><skipped message="CUDA disabled"/></testcase>'
++                   '</testsuite></testsuites>',
++    }
++    expect = {"failed_named": (0, True), "failed_other": (0, False), "passed": (0, False), "skipped": (0, False)}
++    for k, xml in junits.items():
++        p = os.path.join(d, f"{k}.xml")
++        open(p, "w").write(xml)
++        outcome, msg = line.junit_case(p)
++        row = {"pytest_exit": 1 if outcome == "failed" else 0, "outcome": outcome, "failure_message": msg}
++        r = line.classify_kill(row, f"ENG4-MUTANT {mid} executed\n", mid, ["zero-gradient check"])
++        step(f"mut_m10_classify_{k}", "mut_m10_f2", "junit_case + classify_kill on a constructed junit file",
++             "KILLED" if expect[k][1] else "SURVIVED", "KILLED" if r["killed"] else "SURVIVED",
++             {"outcome": outcome, "marker_seen": r["marker_seen"]})
++    outcome, msg = line.junit_case(os.path.join(d, "missing.xml"))
++    r = line.classify_kill({"pytest_exit": -11, "outcome": outcome, "failure_message": msg}, "", mid,
++                           ["zero-gradient check"])
++    step("mut_m10_classify_process_died", "mut_m10_f2", "no junit and a negative exit (a signal)", "KILLED",
++         "KILLED" if r["killed"] else "SURVIVED", {"outcome": outcome})
++    step("mut_m10_lease_guard_outside_forge", "all F2 lines", "lease_guard() called in this CPU process (no "
++         "forge-gpu-run ancestor): the step refuses before touching the environment", "False",
++         str(line.lease_guard()))
++
++
++def main():
++    os.makedirs(TMP, exist_ok=True)
++    readback()
++    g3_steps()
++    bwd0_steps()
++    mut_steps()
++    out = os.path.join(ROOT, "artifacts/eng4/f2/POST_DEVICE_STEPS.json")
++    rec = {"order": "ENG4-F2 L48", "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES"),
++           "steps": STEPS, "all_ok": all(s["ok"] for s in STEPS), "count": len(STEPS)}
++    json.dump(rec, open(out, "w"), indent=1)
++    print("POST_DEVICE_STEPS", len(STEPS), "all ok" if rec["all_ok"] else "MISMATCHES")
++    return 0 if rec["all_ok"] else 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+--- /dev/null	2026-10-11 15:23:23.947999690 -0400
++++ scripts/eng4_f2_suite.py	2026-11-23 09:54:34.146522990 -0500
+@@ -0,0 +1,209 @@
++"""ENG4-F2 J3 suite runner (copy of scripts/eng4_f1_suite.py with arms B and F2; F2 receipts under artifacts/eng4/f2/g4; restores F2; ENG4-F1 H3 runner lineage). ENG4 G4 suite runner: production's test suite (tensor_cuda/tests + tests/) per test ID, for one build.
++
++  python3 -B -P scripts/eng4_suite.py <series> <arm B|E> [--budget <seconds>]
++
++- Installs the arm's engine files into the worktree first (the suite has source-reading tests, so each build runs
++  with its own sources; ENG3's lesson), and its module into the worktree package:
++    B: artifacts/eng4/before/* (git show HEAD:) + tensor_cuda/build-eng4/B/module/<so>
++    E: artifacts/eng4/E_src/* (this round's final sources) + tensor_cuda/build-eng4/E/module/<so>
++  Each module's sha256 must equal its build receipt (artifacts/eng4/build/BUILD_<arm>.json), else exit 3 (L103).
++  After the run (and on any error) Build E's files and module are installed again and their sha256 re-checked.
++- pytest options, identical for both builds: -q -p no:cacheprovider -rfE --rootdir=<root>
++  --basetemp=/tmp/eng4_tmp/pt/<series>_<n> --junitxml -o junit_logging=all --continue-on-collection-errors;
++  excluded: tensor_cuda/tests/test_eng4_matmul.py (this round's own tests, run as G1 / GPU lines) and
++  tensor_cuda/tests/test_terrain_render.py (L40: it writes tracked artifacts/wo*.ppm files; excluded and listed).
++- --budget: GPU-line chunking. The series keeps artifacts/eng4/g4/<series>/progress.json (IDs already run). A run
++  deselects those IDs and stops after the first test that ends past the budget; the next line of the series
++  continues. Without --budget the whole suite runs in one go (the CPU half).
++- Writes artifacts/eng4/g4/<series>/part_<n>/outcomes.json and the merged artifacts/eng4/g4/<series>/outcomes.json:
++  per test ID one of passed/failed/skipped/error/xfailed/xpassed, collection errors by file, and `git status
++  --porcelain` (read-only git) before and after, so a write by a test into the worktree is listed.
++
++Prior art: pytest's hook API (pytest_collection_modifyitems, pytest_runtest_logreport, pytest_collectreport); ENG3's
++eng3_suite.py and eng3_srcswap.py (this repo), whose report plugin this copies. The resumable budgeted chunking is
++mine; no prior art known to me beyond pytest's own --deselect / shouldstop.
++"""
++import datetime
++import hashlib
++import json
++import os
++import shutil
++import subprocess
++import sys
++import time
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++PKG_PARENT = os.path.join(ROOT, "tensor_cuda")
++SO = "_tensor_cuda.cpython-312-x86_64-linux-gnu.so"
++MODULE = os.path.join(PKG_PARENT, "tensor_cuda", SO)
++FILES = ["tensor_cuda/src/matmul.cu", "tensor_cuda/src/ops.cpp", "tensor_cuda/src/bindings.cpp",
++         "tensor_cuda/include/tc/core.h", "tensor_cuda/tests/test_bwd_r1_matmul.py"]
++SRC = {"B": "artifacts/eng4/before", "F2": "artifacts/eng4/f2/F2_src"}
++RECEIPT = {"B": "artifacts/eng4/build/BUILD_B.json", "F2": "artifacts/eng4/f2/build/BUILD_F2.json"}
++EXCLUDE = ["tensor_cuda/tests/test_eng4_matmul.py", "tensor_cuda/tests/test_terrain_render.py"]
++SKIP_STATUS = ("artifacts/eng4/", "tensor_cuda/build-eng4/", "logs/eng4_", "scripts/eng4_",
++               "tensor_cuda/tests/test_eng4_matmul.py") + tuple(FILES)
++
++
++def sha(p):
++    h = hashlib.sha256()
++    with open(p, "rb") as f:
++        for c in iter(lambda: f.read(1 << 20), b""):
++            h.update(c)
++    return h.hexdigest()
++
++
++def install(arm):
++    """Copy the arm's engine files and module into the worktree; return their sha256 after the copy."""
++    rec = json.load(open(os.path.join(ROOT, RECEIPT[arm])))
++    mod = os.path.join(ROOT, "tensor_cuda/build-eng4", arm, "module", SO)
++    if sha(mod) != rec["module_sha256"]:
++        raise SystemExit(f"REFUSED (L103): {mod} sha256 differs from BUILD_{arm}.json")
++    got = {}
++    for f in FILES:
++        src = os.path.join(ROOT, SRC[arm], f.replace("/", "__"))
++        dst = os.path.join(ROOT, f)
++        shutil.copyfile(src, dst)
++        got[f] = sha(dst)
++        assert got[f] == sha(src), f
++        if f in rec["sources"]:  # the engine sources must be the ones this module was built from
++            assert got[f] == rec["sources"][f], (arm, f)
++    tmp = MODULE + ".eng4tmp"
++    shutil.copyfile(mod, tmp)
++    os.replace(tmp, MODULE)  # atomic swap of the installed module (each arm keeps its receipted copy in build-eng4)
++    got["module"] = sha(MODULE)
++    assert got["module"] == rec["module_sha256"]
++    return got
++
++
++def git_status():
++    r = subprocess.run(["git", "-C", ROOT, "status", "--porcelain", "-uall"], capture_output=True, text=True)
++    return sorted(l for l in r.stdout.splitlines() if not any(s in l for s in SKIP_STATUS))
++
++
++class Reports:
++    def __init__(self, done, budget):
++        self.ids, self.collection_errors, self.longrepr = {}, {}, {}
++        self.done, self.budget, self.t0 = done, budget, time.monotonic()
++        self.deselected, self.stopped, self._session = 0, False, None
++
++    def pytest_sessionstart(self, session):
++        self._session = session
++
++    def pytest_collection_modifyitems(self, session, config, items):
++        if not self.done:
++            return
++        drop = [i for i in items if i.nodeid in self.done]
++        self.deselected = len(drop)
++        if drop:
++            config.hook.pytest_deselected(items=drop)
++        items[:] = [i for i in items if i.nodeid not in self.done]
++
++    def pytest_collectreport(self, report):
++        if report.failed:
++            self.collection_errors[report.nodeid] = str(report.longrepr)[-1500:]
++        elif report.skipped:
++            self.ids[report.nodeid + "::<module skipped>"] = "skipped"
++
++    def pytest_runtest_logreport(self, report):
++        cur = self.ids.get(report.nodeid)
++        if hasattr(report, "wasxfail"):
++            out = "xfailed" if report.skipped else "xpassed"
++        elif report.when == "call":
++            out = report.outcome
++        elif report.failed:
++            out = "error"
++        elif report.skipped:
++            out = "skipped"
++        else:
++            out = None
++        if out is None:
++            if cur is None:
++                self.ids[report.nodeid] = "pending"
++            return
++        if cur in (None, "pending", "passed") or out == "error":
++            self.ids[report.nodeid] = out
++        if out in ("failed", "error"):
++            self.longrepr[report.nodeid] = str(report.longrepr)[-800:]
++
++    def pytest_runtest_logfinish(self, nodeid, location):
++        if self.budget and time.monotonic() - self.t0 > self.budget and self._session is not None:
++            self.stopped = True
++            self._session.shouldstop = f"eng4 budget {self.budget}s reached"
++
++
++def main():
++    series, arm = sys.argv[1], sys.argv[2]
++    budget = int(sys.argv[sys.argv.index("--budget") + 1]) if "--budget" in sys.argv else 0
++    d = os.path.join(ROOT, "artifacts/eng4/f2/g4", series)
++    os.makedirs(d, exist_ok=True)
++    prog_path = os.path.join(d, "progress.json")
++    prog = json.load(open(prog_path)) if os.path.exists(prog_path) else {"arm": arm, "parts": 0, "done": []}
++    assert prog["arm"] == arm, (prog["arm"], arm)
++    if prog.get("complete"):
++        print("series", series, "already complete; nothing to run")
++        return 0
++    n = prog["parts"] + 1
++    part = os.path.join(d, f"part_{n}")
++    os.makedirs(part)  # write-once: refuses if this part exists
++    before = git_status()
++    t0 = datetime.datetime.now(datetime.timezone.utc).isoformat()
++    try:
++        installed = install(arm)
++        os.environ["PYTHONPATH"] = PKG_PARENT
++        os.environ.setdefault("TMPDIR", "/tmp/eng4_tmp")
++        sys.path.insert(0, PKG_PARENT)
++        import tensor_cuda as tc
++        assert os.path.realpath(tc._C.__file__) == os.path.realpath(MODULE), tc._C.__file__
++        import pytest
++        args = ["-q", "-p", "no:cacheprovider", "-rfE", "--rootdir=" + ROOT,
++                "--basetemp=/tmp/eng4_tmp/pt/" + series + f"_{n}", "--junitxml=" + os.path.join(part, "junit.xml"),
++                "-o", "junit_logging=all", "--continue-on-collection-errors"]
++        for e in EXCLUDE:
++            args += ["--ignore=" + os.path.join(ROOT, e)]
++        args += [os.path.join(ROOT, "tensor_cuda/tests"), os.path.join(ROOT, "tests")]
++        plugin = Reports(set(prog["done"]), budget)
++        os.chdir(ROOT)
++        rc = int(pytest.main(args, plugins=[plugin]))
++    finally:
++        restored = install("F2")
++    after = git_status()
++    ran = dict(plugin.ids)
++    counts = {}
++    for v in ran.values():
++        counts[v] = counts.get(v, 0) + 1
++    res = {"series": series, "arm": arm, "part": n, "start": t0,
++           "end": datetime.datetime.now(datetime.timezone.utc).isoformat(), "installed": installed,
++           "restored_F2": restored, "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES"),
++           "budget_s": budget, "stopped_by_budget": plugin.stopped, "deselected_already_run": plugin.deselected,
++           "pytest_args": args, "pytest_exit": rc, "counts": counts, "n_ids": len(ran),
++           "collection_errors": plugin.collection_errors, "outcomes": ran, "failures": plugin.longrepr,
++           "git_status_before": before, "git_status_after": after,
++           "worktree_writes_by_tests": sorted(set(after) - set(before))}
++    with open(os.path.join(part, "outcomes.json"), "w") as f:
++        json.dump(res, f, indent=1)
++    prog["parts"] = n
++    prog["done"] = sorted(set(prog["done"]) | {k for k in ran if not k.endswith("::<module skipped>")})
++    prog["complete"] = not plugin.stopped
++    with open(prog_path, "w") as f:
++        json.dump(prog, f)
++    merged, coll, writes = {}, {}, []
++    for i in range(1, n + 1):
++        o = json.load(open(os.path.join(d, f"part_{i}", "outcomes.json")))
++        merged.update(o["outcomes"])
++        coll.update(o["collection_errors"])
++        writes += o["worktree_writes_by_tests"]
++    mc = {}
++    for v in merged.values():
++        mc[v] = mc.get(v, 0) + 1
++    with open(os.path.join(d, "outcomes.json"), "w") as f:
++        json.dump({"series": series, "arm": arm, "parts": n, "complete": prog["complete"], "counts": mc,
++                   "n_ids": len(merged), "collection_errors": coll, "outcomes": merged,
++                   "worktree_writes_by_tests": sorted(set(writes))}, f, indent=1)
++    print("ENG4 suite", series, arm, "part", n, "exit", rc, counts, "complete", prog["complete"],
++          "collection errors", len(plugin.collection_errors), "new worktree writes", res["worktree_writes_by_tests"])
++    return 0  # outcomes are compared per ID, not by exit code
++
++
++if __name__ == "__main__":
++    sys.exit(main())

@@ -1,0 +1,12 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng4/tensor_cuda/src/ops.cpp	2026-11-23 10:04:04.229169604 -0500
++++ /tmp/eng4_src_m10_f2_empty_batch_raise/tensor_cuda/src/ops.cpp	2026-11-23 10:04:29.376894796 -0500
+@@ -854,7 +854,8 @@
+     // forward's K = 0 fill. Prior art: the gradient of a broadcast operand is the sum over the broadcast axes, zero
+     // over an empty axis (reverse-mode autodiff; PyTorch's sum_to_size); NumPy's empty sum is 0. Ours: the placement.
+     const auto& a_shape = a.data().shape;
+-    if (a.ndim() != b.ndim() &&
++    std::fprintf(stderr, "ENG4-MUTANT m10_f2_empty_batch_raise executed\n"); std::fflush(stderr); 
++    if (false && a.ndim() != b.ndim() &&
+         std::any_of(a_shape.begin(), a_shape.end() - 2, [](int64_t dim) { return dim == 0; })) {
+       const NDArray& b_data = b.data();
+       NDArray zero_b = NDArray::zeros(b_data.shape, b_data.dtype, b_data.device);

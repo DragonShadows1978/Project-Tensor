@@ -1,0 +1,12 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng4/tensor_cuda/src/matmul.cu	2026-11-23 08:56:32.842828976 -0500
++++ /tmp/eng4_src_m08_k0_gemm/tensor_cuda/src/matmul.cu	2026-11-23 08:57:00.069004595 -0500
+@@ -150,7 +150,8 @@
+   // result, or zeros when the contracted dimension is 0, the empty sum); the BLAS reference xGEMM quick-return
+   // (M = 0 or N = 0 returns; K = 0 with beta = 0 sets C = 0). Ours: placement after the predicate.
+   if (numel_of(plan.out_shape) == 0) return NDArray(plan.out_shape, a.dtype, a.device);  // 0 bytes: no allocation
+-  if (plan.k == 0) return NDArray::zeros(plan.out_shape, a.dtype, a.device);
++  std::fprintf(stderr, "ENG4-MUTANT m08_k0_gemm executed\n"); std::fflush(stderr); 
++  if (false) return NDArray::zeros(plan.out_shape, a.dtype, a.device);
+ 
+   // trans_b: C = alpha * A @ B^T with B stored row-major (N, K) — consumes the
+   // operand without a materialized transpose copy (cuBLAS reads it via OP_T).

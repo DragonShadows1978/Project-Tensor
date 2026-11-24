@@ -1,0 +1,54 @@
+{
+ "written_utc": "2026-11-23T13:47:53.407524+00:00",
+ "written_before": "H3's F1 after-run (CPU) and every F1 GPU line",
+ "suite_ids": {
+  "carried_from_ENG4": {
+   "ruling": "ENG4 M7 (stands, X5)",
+   "test_ids": [
+    "tensor_cuda/tests/test_bwd_r1_matmul.py::test_gpu_refuses_forward_first_batch_only[a_batch0-b_batch0]",
+    "tensor_cuda/tests/test_bwd_r1_matmul.py::test_gpu_refuses_forward_first_batch_only[a_batch1-b_batch1]",
+    "tensor_cuda/tests/test_bwd_r1_matmul.py::test_gpu_refuses_forward_first_batch_only[a_batch2-b_batch2]"
+   ],
+   "old_assertion": "output = tc.matmul(a, b) succeeds; pytest.raises(RuntimeError, match='forward uses stride 0 and only the first B matrix') around output.backward(); a.grad, b.grad and output.grad are None",
+   "new_assertion": "pytest.raises(RuntimeError, match=r'A \\[<A shape>\\].*B \\[<B shape>\\]') around tc.matmul(a, b); a.grad and b.grad are None (there is no output)",
+   "expected_outcome": {
+    "cpu": {
+     "B": "skipped",
+     "E": "skipped"
+    },
+    "gpu": {
+     "B": "passed",
+     "E": "passed"
+    }
+   }
+  },
+  "new_in_F1": [],
+  "prediction": "no other existing suite ID changes outcome. Reasoning: X1's refusal keeps the prefix 'matmul supports float32/float16/bfloat16 only' (Build B raised the same prefix for int64/uint8/bool pairs, after allocating); X2 changes only zero-size forward results, and no existing test found by rg asserts a zero-size forward result; X3 changes only non-native byte orders through from_numpy/_C.tensor, and no existing test passes one (rg for '>f', 'newbyteorder', 'byteswap' in the test trees: see census); the status check runs after the existing CUDA error check, so B's messages hold where a CUDA error exists."
+ },
+ "g3_cells": {
+  "ruling": "X2: the result changes only where Build B returned unwritten memory (K = 0); these cells are held to NumPy's result (positive zeros), with B's values recorded beside them, not to B",
+  "cells": [
+   "a_K0-float32",
+   "a_K0-float16",
+   "a_K0-bfloat16",
+   "b_K0-float32",
+   "b_K0-float16",
+   "b_K0-bfloat16",
+   "b_rank2_K0-float32",
+   "b_rank2_K0-float16",
+   "b_rank2_K0-bfloat16",
+   "c_K0-float32",
+   "c_K0-float16",
+   "c_K0-bfloat16"
+  ],
+  "other_zero_size_cells": "M = 0, N = 0 and batch = 0 cells: empty outputs in both builds (shape and dtype held to NumPy's rule under M2), not a change"
+ },
+ "changed_test_file": {
+  "file": "tensor_cuda/tests/test_eng4_matmul.py (this round's own file; L38 lists it; excluded from the suite runs)",
+  "changes": [
+   "X4: test_g1_n1_listed_dtypes_keep_build_b_result -> test_g1_n1_listed_dtypes_keep_their_bytes[dtype-entry]: expected bytes are the array's own bytes (no import from scripts/, no recorded JSON); both entries checked",
+   "X2: ENG4's accepted controls M/N/K/batch_eq_intmax (zero-size outputs) move from 'reaches the GEMM (CUDA error)' to test_h1_zero_size_returns_numpy_result (returns NumPy's empty result without a GEMM)",
+   "new H1 tests: test_h1_unsupported_dtype_refuses, test_h1_byteorder_refuses, test_h1_tensor_casts_byteorder, test_h1_zero_size_returns_numpy_result; new GPU test test_gpu_zero_size_returns_numpy_result (m08's line)"
+  ]
+ }
+}

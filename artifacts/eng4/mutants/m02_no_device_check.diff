@@ -1,0 +1,12 @@
+--- /mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng4/tensor_cuda/src/matmul.cu	2026-11-23 07:48:08.252828626 -0500
++++ /tmp/eng4_src_m02_no_device_check/tensor_cuda/src/matmul.cu	2026-11-23 07:55:48.802399977 -0500
+@@ -78,8 +78,7 @@
+                   "inner dimensions differ: A's K " + std::to_string(p.k) + ", B's K " + std::to_string(p.kb), a, b,
+                   trans_b);
+   // M4: one device for both operands (a host and a CUDA operand, or two CUDA indices, are refused).
+-  if (a.device.type != b.device.type || a.device.index != b.device.index)
+-    return refuse(p, MatmulOperandIssue::Device, "operands are on different devices", a, b, trans_b);
++  std::fprintf(stderr, "ENG4-MUTANT m02_no_device_check executed\n"); std::fflush(stderr); 
+   // M4: the cuBLAS API takes M, N, K, the leading dimensions (K or N) and the batch count as int.
+   if (p.m > INT_MAX || p.n > INT_MAX || p.k > INT_MAX)
+     return refuse(p, MatmulOperandIssue::Dim,
