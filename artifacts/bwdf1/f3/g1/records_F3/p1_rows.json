@@ -1,0 +1,1247 @@
+{
+ "rows": [
+  [
+   "e1-rope_apply-empty-short-sin",
+   "E1",
+   "accept",
+   "x=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    0,
+    2,
+    2
+   ],
+   {},
+   "refuses 'position past table end' (the review's case)"
+  ],
+  [
+   "e1-rope_apply-empty-short-cos",
+   "E1",
+   "accept",
+   "x=C((0,2,2)); cs=H((1,2)); sn=H((2,2))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    0,
+    2,
+    2
+   ],
+   {},
+   "refuses 'position past table end'"
+  ],
+  [
+   "e1-rope_apply-empty-negative-pos0",
+   "E1",
+   "accept",
+   "x=C((0,2,2)); cs=H((4,2)); sn=H((4,2))",
+   "tc.rope_apply(x, cs, sn, -1)",
+   [
+    0,
+    2,
+    2
+   ],
+   {},
+   "refuses 'position past table end'"
+  ],
+  [
+   "e1-rope_apply-zero-D",
+   "E1",
+   "accept",
+   "x=C((2,3,0)); cs=H((1,0)); sn=H((1,0))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    2,
+    3,
+    0
+   ],
+   {},
+   "refuses 'position past table end' (L 3 > 1 row)"
+  ],
+  [
+   "e1-export_rope_rows-empty-short-sin",
+   "E1",
+   "accept",
+   "c=C((0,4,2)); cs=H((2,2)); sn=H((1,2))",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 2, 0)",
+   [
+    0,
+    2,
+    2
+   ],
+   {
+    "no_grad": 1
+   },
+   "refuses 'position past table end'"
+  ],
+  [
+   "e1-export_row_pair-empty-short-sin",
+   "E1",
+   "accept",
+   "r=C((0,4,2)); p=C((0,4,2)); cs=H((2,2)); sn=H((1,2))",
+   "tc.export_row_pair(r, p, cs, sn, 1, 1, 0, 0, 2, 0)",
+   "tuple",
+   {
+    "no_grad": 1
+   },
+   "refuses 'position past table end'"
+  ],
+  [
+   "e1-export_row_pairs-empty-short-sin",
+   "E1",
+   "accept",
+   "r0=C((0,4,2)); p0=C((0,4,2)); cs=H((2,2)); sn=H((1,2))",
+   "tc.export_row_pairs([r0], [p0], cs, sn, 1, 1, [0], [0], 2, 0)",
+   "tuple",
+   {
+    "no_grad": 1
+   },
+   "refuses 'position past table end' [pair 0 of 1]"
+  ],
+  [
+   "e1-swap-empty-short-sin",
+   "E1",
+   "accept",
+   "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   "tuple",
+   {
+    "no_grad": 1
+   },
+   "refuses 'position past table end' [pair 0 of 1]"
+  ],
+  [
+   "e1-arena-empty-short-sin",
+   "E1",
+   "accept",
+   "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "tc.arena_row_pair_transaction([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 4)",
+   "tuple",
+   {
+    "no_grad": 1
+   },
+   "refuses 'position past table end' (through the swap preflight)"
+  ],
+  [
+   "e1c-rope_apply-reading-short-sin",
+   "E1 control",
+   "refuse",
+   "x=H((1,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "rope_apply: position past table end",
+    "sin [1, 2]"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "e1c-rope_apply-reading-negative-pos0",
+   "E1 control",
+   "refuse",
+   "x=H((1,2,2)); cs=H((4,2)); sn=H((4,2))",
+   "tc.rope_apply(x, cs, sn, -1)",
+   [
+    "rope_apply: position past table end",
+    "pos0 -1"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "e1c-rope_apply-reading-covering",
+   "E1 control",
+   "preflight",
+   "x=H((1,2,2)); cs=H((2,2)); sn=H((2,2))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "CUDA error at rope_apply"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "e2-rope_apply-sin-T-D-1",
+   "E2",
+   "preflight",
+   "x=H((1,2,2)); cs=H((2,2)); sn=H((2,2,1))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "CUDA error at rope_apply"
+   ],
+   {},
+   "refuses 'tables must be (T, D)' (the review's case; Build B computes it)"
+  ],
+  [
+   "e2-rope_apply-cos-T-D-1-1-empty",
+   "E2",
+   "accept",
+   "x=C((0,2,2)); cs=H((2,2,1,1)); sn=H((2,2))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    0,
+    2,
+    2
+   ],
+   {},
+   "refuses 'tables must be (T, D)'"
+  ],
+  [
+   "e2-export_rope_rows-sin-T-D-1-empty",
+   "E2",
+   "accept",
+   "c=C((0,4,2)); cs=H((8,2)); sn=H((8,2,1))",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)",
+   [
+    0,
+    1,
+    2
+   ],
+   {
+    "no_grad": 1
+   },
+   "refuses 'tables must be (T, D)'"
+  ],
+  [
+   "e2-swap-sin-T-D-1-empty",
+   "E2",
+   "accept",
+   "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((2,2,1))",
+   "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   "tuple",
+   {
+    "no_grad": 1
+   },
+   "refuses 'tables must be (T, D)'"
+  ],
+  [
+   "e2c-sin-trailing-2",
+   "E2 control",
+   "refuse",
+   "x=C((0,2,2)); cs=H((2,2)); sn=H((2,2,2))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "rope_apply: tables must be (T, D)",
+    "sin [2, 2, 2]"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "e2c-sin-rank1",
+   "E2 control",
+   "refuse",
+   "x=C((0,2,2)); cs=H((2,2)); sn=H((2,))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "rope_apply: tables must be (T, D)",
+    "sin [2]"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "e2c-cos-leading-1",
+   "E2 control",
+   "refuse",
+   "x=C((0,2,2)); cs=H((1,2,2)); sn=H((2,2))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "rope_apply: tables must be (T, D)",
+    "cos [1, 2, 2]"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "e2c-sin-wrong-D",
+   "E2 control",
+   "refuse",
+   "x=H((1,2,2)); cs=H((2,2)); sn=H((2,4,1))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "rope_apply: tables must be (T, D)",
+    "sin [2, 4, 1]"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "e3-sum-duplicate",
+   "E3",
+   "refuse",
+   "a=H((2,))",
+   "a.sum([0, 0])",
+   [
+    "reduce: duplicate value in axis",
+    "axes [0, 0]",
+    "operand [2]"
+   ],
+   {
+    "raises": "ValueError"
+   },
+   "reaches the kernel with red_size 4 over a 2-element buffer (the review's case)"
+  ],
+  [
+   "e3-sum-out-of-range",
+   "E3",
+   "refuse",
+   "a=H((2,))",
+   "a.sum([8])",
+   [
+    "reduce: axis 8 is out of bounds for array of dimension 1"
+   ],
+   {
+    "raises": "IndexError"
+   },
+   "writes ReduceSpec::reduced[8] and reads shape[8] (the review's case)"
+  ],
+  [
+   "e3-sum-negative-duplicate",
+   "E3",
+   "refuse",
+   "a=H((2,3))",
+   "a.sum([1, -1])",
+   [
+    "reduce: duplicate value in axis",
+    "axes [1, -1]"
+   ],
+   {
+    "raises": "ValueError"
+   },
+   "reaches the kernel"
+  ],
+  [
+   "e3-sum-negative-out-of-range",
+   "E3",
+   "refuse",
+   "a=H((2,3))",
+   "a.sum([-3])",
+   [
+    "reduce: axis -3 is out of bounds for array of dimension 2"
+   ],
+   {
+    "raises": "IndexError"
+   },
+   "writes slot -1"
+  ],
+  [
+   "e3-sum-rank0-axis",
+   "E3",
+   "refuse",
+   "a=H((1,)).reshape([])",
+   "a.sum([0])",
+   [
+    "reduce: axis 0 is out of bounds for array of dimension 0"
+   ],
+   {
+    "raises": "IndexError"
+   },
+   "indexes an empty shape vector"
+  ],
+  [
+   "e3-sum-empty-duplicate",
+   "E3",
+   "refuse",
+   "a=C((0,3))",
+   "a.sum([1, 1])",
+   [
+    "reduce: duplicate value in axis"
+   ],
+   {
+    "raises": "ValueError"
+   },
+   "returns [0] (axis 1 counted twice; the output is empty, so nothing is allocated)"
+  ],
+  [
+   "e3-mean-duplicate",
+   "E3",
+   "refuse",
+   "a=H((2,3))",
+   "a.mean([0, 0])",
+   [
+    "mean: duplicate value in axis",
+    "axes [0, 0]"
+   ],
+   {
+    "raises": "ValueError"
+   },
+   "counts axis 0 twice, then sums"
+  ],
+  [
+   "e3-mean-out-of-range",
+   "E3",
+   "refuse",
+   "a=H((2,))",
+   "a.mean([5])",
+   [
+    "mean: axis 5 is out of bounds for array of dimension 1"
+   ],
+   {
+    "raises": "IndexError"
+   },
+   "reads a.shape()[5] before sum"
+  ],
+  [
+   "e3-max-duplicate",
+   "E3",
+   "refuse",
+   "a=H((2,3))",
+   "a.max([1, 1])",
+   [
+    "reduce: duplicate value in axis"
+   ],
+   {
+    "raises": "ValueError"
+   },
+   "reaches the kernel"
+  ],
+  [
+   "e3-min-out-of-range",
+   "E3",
+   "refuse",
+   "a=H((2,3))",
+   "a.min([2])",
+   [
+    "reduce: axis 2 is out of bounds for array of dimension 2"
+   ],
+   {
+    "raises": "IndexError"
+   },
+   "writes slot 2's shape"
+  ],
+  [
+   "e3-prod-duplicate",
+   "E3",
+   "refuse",
+   "a=H((2,3))",
+   "a.prod([-2, 0])",
+   [
+    "reduce: duplicate value in axis"
+   ],
+   {
+    "raises": "ValueError"
+   },
+   "reaches the kernel"
+  ],
+  [
+   "e3-var-out-of-range",
+   "E3",
+   "refuse",
+   "a=H((2,3))",
+   "a.var([3])",
+   [
+    "mean: axis 3 is out of bounds for array of dimension 2"
+   ],
+   {
+    "raises": "IndexError"
+   },
+   "reads shape[3]"
+  ],
+  [
+   "e3-std-duplicate",
+   "E3",
+   "refuse",
+   "a=H((2,3))",
+   "a.std([1, 1])",
+   [
+    "mean: duplicate value in axis"
+   ],
+   {
+    "raises": "ValueError"
+   },
+   "reaches the kernel"
+  ],
+  [
+   "e3-softmax-out-of-range",
+   "E3",
+   "refuse",
+   "a=H((2,3))",
+   "a.softmax(-3)",
+   [
+    "reduce: axis -3 is out of bounds for array of dimension 2"
+   ],
+   {
+    "raises": "IndexError"
+   },
+   "writes keep_shape[-1] (the process can die)"
+  ],
+  [
+   "e3-log_softmax-out-of-range",
+   "E3",
+   "refuse",
+   "a=H((2,3))",
+   "a.log_softmax(2)",
+   [
+    "reduce: axis 2 is out of bounds for array of dimension 2"
+   ],
+   {
+    "raises": "IndexError"
+   },
+   "writes slot 2"
+  ],
+  [
+   "e3-argmax-out-of-range",
+   "E3",
+   "refuse",
+   "a=H((2,3))",
+   "a.argmax(2)",
+   [
+    "argmax: axis 2 is out of bounds for array of dimension 2"
+   ],
+   {
+    "raises": "IndexError"
+   },
+   "reads shape[2] in axis_split"
+  ],
+  [
+   "e3-argmin-out-of-range",
+   "E3",
+   "refuse",
+   "a=H((2,3))",
+   "a.argmin(-3)",
+   [
+    "argmin: axis -3 is out of bounds for array of dimension 2"
+   ],
+   {
+    "raises": "IndexError"
+   },
+   "reads shape[-1]"
+  ],
+  [
+   "e3c-sum-valid-negative",
+   "E3 control",
+   "preflight",
+   "a=H((2,3))",
+   "a.sum([-1])",
+   [
+    "CUDA error at reduce_lastdim"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "e3c-sum-two-distinct",
+   "E3 control",
+   "preflight",
+   "a=H((2,3,4))",
+   "a.sum([2, 0])",
+   [
+    "CUDA error at reduce"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "e3c-mean-valid",
+   "E3 control",
+   "preflight",
+   "a=H((2,3))",
+   "a.mean([0, 1])",
+   [
+    "CUDA error at reduce_lastdim"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "e3c-argmax-valid",
+   "E3 control",
+   "preflight",
+   "a=H((2,3))",
+   "a.argmax(-1)",
+   [
+    "CUDA error at arg"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "e4-splice-byte-bound",
+   "E4",
+   "refuse",
+   "o=C((0,2305843009213693952,2),'uint8'); i=C((0,2305843009213693952,2),'uint8')",
+   "tc.splice_rows(o, i, 1, 0, 0)",
+   [
+    "splice_rows: the output NDArray: byte size overflows int64",
+    "[0, 4611686018427387904, 2]",
+    "operand 0 old_cache [0, 2305843009213693952, 2]"
+   ],
+   {
+    "raises": "OverflowError",
+    "no_grad": 1
+   },
+   "the constructor refuses it with its bare text, after the check"
+  ],
+  [
+   "e4-swap-pair1-byte-bound",
+   "E4",
+   "refuse",
+   "r0=C((0,4,2),'uint8'); i0=C((0,1,2),'uint8'); r1=C((0,2305843009213693952,2),'uint8'); i1=C((0,2305843009213693952,2),'uint8'); p0=C((0,4,0)); p1=C((0,4,0)); j0=C((0,1,0)); j1=C((0,1,0)); cs=C((1,0)); sn=C((1,0))",
+   "tc.swap_row_pairs_with_rope([r0, r1], [p0, p1], [i0, i1], [j0, j1], cs, sn, 1, 1, 0, 0, 0)",
+   [
+    "splice_rows: the output NDArray: byte size overflows int64",
+    "[pair 1 of 2]"
+   ],
+   {
+    "raises": "OverflowError",
+    "no_grad": 1
+   },
+   "runs pair 0, then pair 1's constructor refuses (no pair named; the review's case)"
+  ],
+  [
+   "e4-arena-layer1-byte-bound",
+   "E4",
+   "refuse",
+   "r0=C((0,4,2),'uint8'); r1=C((0,2305843009213693952,2),'uint8'); p0=C((0,4,0),'uint8'); p1=C((0,4,0),'uint8'); i0=C((0,2305843009213693952,2),'uint8'); i1=C((0,2305843009213693952,2),'uint8'); j0=C((0,2305843009213693952,0),'uint8'); j1=C((0,2305843009213693952,0),'uint8'); cs=C((2305843009213693952,0),'uint8'); sn=C((2305843009213693952,0),'uint8')",
+   "tc.arena_row_pair_transaction([r0, r1], [p0, p1], [i0, i1], [j0, j1], cs, sn, 1, 1, 0, 0, 2305843009213693952)",
+   [
+    "splice_rows: the output NDArray: byte size overflows int64",
+    "[pair 1 of 2]"
+   ],
+   {
+    "raises": "OverflowError",
+    "no_grad": 1
+   },
+   "runs layer 0, then layer 1's constructor refuses"
+  ],
+  [
+   "e4c-splice-fits",
+   "E4 control",
+   "accept",
+   "o=C((0,2305843009213693952,2),'uint8'); i=C((0,1,2),'uint8')",
+   "tc.splice_rows(o, i, 1, 0, 0)",
+   [
+    0,
+    2305843009213693953,
+    2
+   ],
+   {
+    "no_grad": 1
+   },
+   "same"
+  ],
+  [
+   "d1-where-empty-mixed-dtype",
+   "D1 (F05)",
+   "refuse",
+   "c=C((0,)); x=C((0,)); y=C((0,),'float16')",
+   "tc.where(c, x, y)",
+   [
+    "where: x has dtype float32 but y has float16"
+   ],
+   {},
+   "returns [0] (Build B's empty no-op)"
+  ],
+  [
+   "d1-where-all-true-mixed-dtype",
+   "D1 (F05)",
+   "refuse",
+   "c=H((2,)); x=H((2,)); y=H((2,),'float16')",
+   "tc.where(c, x, y)",
+   [
+    "where: x has dtype float32 but y has float16"
+   ],
+   {},
+   "same (the review's case)"
+  ],
+  [
+   "d1-rank9-binary-empty",
+   "D1 (F04)",
+   "refuse",
+   "a=C((0,)).reshape([1]*8+[0]); b=C((0,)).reshape([1]*8+[0])",
+   "a + b",
+   [
+    "ew_binary: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "same (the review's case)"
+  ],
+  [
+   "d1-rank9-compare-empty",
+   "D1 (F04)",
+   "refuse",
+   "a=C((0,)).reshape([1]*8+[0])",
+   "a.gt(a)",
+   [
+    "compare: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "d1-rank9-where-empty",
+   "D1 (F04)",
+   "refuse",
+   "a=C((0,)).reshape([1]*8+[0])",
+   "tc.where(a, a, a)",
+   [
+    "where: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "d1-rank9-expand-empty",
+   "D1 (F04)",
+   "refuse",
+   "a=C((0,))",
+   "a.expand([1]*8+[0])",
+   [
+    "broadcast_to: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "d1-rank9-masked_fill-empty",
+   "D1 (F04)",
+   "refuse",
+   "a=C((0,)).reshape([1]*8+[0])",
+   "a.masked_fill(a, 0.0)",
+   [
+    "masked_fill: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "d1-rank9-axpy-empty",
+   "D1 (F04)",
+   "refuse",
+   "a=C((0,)).reshape([1]*8+[0])",
+   "tc._C.axpy_(a, a, 1.0)",
+   [
+    "axpy_: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "d1-rank9-sum-empty",
+   "D1 (F04)",
+   "refuse",
+   "a=C((0,)).reshape([1]*8+[0])",
+   "a.sum()",
+   [
+    "reduce: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   {},
+   "same"
+  ],
+  [
+   "d1-axpy-empty-destination-shape",
+   "D1 (F03)",
+   "refuse",
+   "p=C((0,1)); o=C((0,2))",
+   "tc._C.axpy_(p, o, 1.0)",
+   [
+    "axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2]",
+    "does not map element for element"
+   ],
+   {},
+   "same (the review's case; Build B's zero-byte no-op)"
+  ],
+  [
+   "d1-rope-table-dtype-empty",
+   "D1 (F08)",
+   "refuse",
+   "x=C((0,2,2)); cs=H((2,2),'float16'); sn=H((2,2))",
+   "tc.rope_apply(x, cs, sn, 0)",
+   [
+    "rope_apply: table/x dtype mismatch",
+    "cos [2, 2] float16"
+   ],
+   {},
+   "same (the review's case: no table byte is read)"
+  ],
+  [
+   "d1-rope-table-dtype-swap-empty",
+   "D1 (F08)",
+   "refuse",
+   "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((2,2),'bfloat16')",
+   "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   [
+    "rope_apply: table/x dtype mismatch",
+    "[pair 0 of 1]"
+   ],
+   {
+    "no_grad": 1
+   },
+   "same"
+  ]
+ ],
+ "results": {
+  "e1-rope_apply-empty-short-sin": {
+   "raised": null,
+   "result": [
+    0,
+    2,
+    2
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "e1-rope_apply-empty-short-cos": {
+   "raised": null,
+   "result": [
+    0,
+    2,
+    2
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "e1-rope_apply-empty-negative-pos0": {
+   "raised": null,
+   "result": [
+    0,
+    2,
+    2
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "e1-rope_apply-zero-D": {
+   "raised": null,
+   "result": [
+    2,
+    3,
+    0
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "e1-export_rope_rows-empty-short-sin": {
+   "raised": null,
+   "result": [
+    0,
+    2,
+    2
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "e1-export_row_pair-empty-short-sin": {
+   "raised": null,
+   "result": "tuple",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e1-export_row_pairs-empty-short-sin": {
+   "raised": null,
+   "result": "tuple",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e1-swap-empty-short-sin": {
+   "raised": null,
+   "result": "tuple",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e1-arena-empty-short-sin": {
+   "raised": null,
+   "result": "tuple",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e1c-rope_apply-reading-short-sin": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: position past table end (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e1c-rope_apply-reading-negative-pos0": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: position past table end (x [1, 2, 2] float32 on cpu, cos [4, 2] float32 on cpu, sin [4, 2] float32 on cpu, pos0 -1)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e1c-rope_apply-reading-covering": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "e2-rope_apply-sin-T-D-1": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "e2-rope_apply-cos-T-D-1-1-empty": {
+   "raised": null,
+   "result": [
+    0,
+    2,
+    2
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "e2-export_rope_rows-sin-T-D-1-empty": {
+   "raised": null,
+   "result": [
+    0,
+    1,
+    2
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "e2-swap-sin-T-D-1-empty": {
+   "raised": null,
+   "result": "tuple",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e2c-sin-trailing-2": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2, 2] float32 on cpu, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e2c-sin-rank1": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2] float32 on cpu, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e2c-cos-leading-1": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [1, 2, 2] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e2c-sin-wrong-D": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 4, 1] float32 on cpu, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-sum-duplicate": {
+   "raised": "ValueError",
+   "message": "reduce: duplicate value in axis (axes [0, 0], operand [2]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-sum-out-of-range": {
+   "raised": "IndexError",
+   "message": "reduce: axis 8 is out of bounds for array of dimension 1 (axes [8], operand [2]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-sum-negative-duplicate": {
+   "raised": "ValueError",
+   "message": "reduce: duplicate value in axis (axes [1, -1], operand [2, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-sum-negative-out-of-range": {
+   "raised": "IndexError",
+   "message": "reduce: axis -3 is out of bounds for array of dimension 2 (axes [-3], operand [2, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-sum-rank0-axis": {
+   "raised": "IndexError",
+   "message": "reduce: axis 0 is out of bounds for array of dimension 0 (axes [0], operand []); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-sum-empty-duplicate": {
+   "raised": "ValueError",
+   "message": "reduce: duplicate value in axis (axes [1, 1], operand [0, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-mean-duplicate": {
+   "raised": "ValueError",
+   "message": "mean: duplicate value in axis (axes [0, 0], operand [2, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-mean-out-of-range": {
+   "raised": "IndexError",
+   "message": "mean: axis 5 is out of bounds for array of dimension 1 (axes [5], operand [2]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-max-duplicate": {
+   "raised": "ValueError",
+   "message": "reduce: duplicate value in axis (axes [1, 1], operand [2, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-min-out-of-range": {
+   "raised": "IndexError",
+   "message": "reduce: axis 2 is out of bounds for array of dimension 2 (axes [2], operand [2, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-prod-duplicate": {
+   "raised": "ValueError",
+   "message": "reduce: duplicate value in axis (axes [-2, 0], operand [2, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-var-out-of-range": {
+   "raised": "IndexError",
+   "message": "mean: axis 3 is out of bounds for array of dimension 2 (axes [3], operand [2, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-std-duplicate": {
+   "raised": "ValueError",
+   "message": "mean: duplicate value in axis (axes [1, 1], operand [2, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-softmax-out-of-range": {
+   "raised": "IndexError",
+   "message": "reduce: axis -3 is out of bounds for array of dimension 2 (axes [-3], operand [2, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-log_softmax-out-of-range": {
+   "raised": "IndexError",
+   "message": "reduce: axis 2 is out of bounds for array of dimension 2 (axes [2], operand [2, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-argmax-out-of-range": {
+   "raised": "IndexError",
+   "message": "argmax: axis 2 is out of bounds for array of dimension 2 (axes [2], operand [2, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3-argmin-out-of-range": {
+   "raised": "IndexError",
+   "message": "argmin: axis -3 is out of bounds for array of dimension 2 (axes [-3], operand [2, 3]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e3c-sum-valid-negative": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "e3c-sum-two-distinct": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at reduce: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "e3c-mean-valid": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "e3c-argmax-valid": {
+   "raised": "RuntimeError",
+   "message": "CUDA error at arg: no CUDA-capable device is detected",
+   "calls": 5,
+   "by_function": {
+    "cudaGetErrorString": 1,
+    "cudaGetLastError": 1,
+    "cudaLaunchKernel": 1,
+    "__cudaPopCallConfiguration": 1,
+    "__cudaPushCallConfiguration": 1
+   }
+  },
+  "e4-splice-byte-bound": {
+   "raised": "OverflowError",
+   "message": "splice_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 old_cache [0, 2305843009213693952, 2] uint8 on cuda:0, operand 1 insert [0, 2305843009213693952, 2] uint8 on cuda:0, dim 1, head 0, tail_start 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e4-swap-pair1-byte-bound": {
+   "raised": "OverflowError",
+   "message": "splice_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 old_cache [0, 2305843009213693952, 2] uint8 on cuda:0, operand 1 insert [0, 2305843009213693952, 2] uint8 on cuda:0, dim 1, head 0, tail_start 0) [pair 1 of 2]",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e4-arena-layer1-byte-bound": {
+   "raised": "OverflowError",
+   "message": "splice_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 old_cache [0, 2305843009213693952, 2] uint8 on cuda:0, operand 1 insert [0, 2305843009213693952, 2] uint8 on cuda:0, dim 1, head 0, tail_start 0) [pair 1 of 2]",
+   "calls": 0,
+   "by_function": {}
+  },
+  "e4c-splice-fits": {
+   "raised": null,
+   "result": [
+    0,
+    2305843009213693953,
+    2
+   ],
+   "calls": 0,
+   "by_function": {}
+  },
+  "d1-where-empty-mixed-dtype": {
+   "raised": "RuntimeError",
+   "message": "where: x has dtype float32 but y has float16; the data operands must match (cond [0] float32, x [0] float32, y [0] float16); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "d1-where-all-true-mixed-dtype": {
+   "raised": "RuntimeError",
+   "message": "where: x has dtype float32 but y has float16; the data operands must match (cond [2] float32, x [2] float32, y [2] float16); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "d1-rank9-binary-empty": {
+   "raised": "RuntimeError",
+   "message": "ew_binary: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "d1-rank9-compare-empty": {
+   "raised": "RuntimeError",
+   "message": "compare: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "d1-rank9-where-empty": {
+   "raised": "RuntimeError",
+   "message": "where: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (cond [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, x [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, y [1, 1, 1, 1, 1, 1, 1, 1, 0] float32); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "d1-rank9-expand-empty": {
+   "raised": "RuntimeError",
+   "message": "broadcast_to: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (target [1, 1, 1, 1, 1, 1, 1, 1, 0], operand [0]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "d1-rank9-masked_fill-empty": {
+   "raised": "RuntimeError",
+   "message": "masked_fill: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (mask [1, 1, 1, 1, 1, 1, 1, 1, 0], a [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "d1-rank9-axpy-empty": {
+   "raised": "RuntimeError",
+   "message": "axpy_: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (param [1, 1, 1, 1, 1, 1, 1, 1, 0], other [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "d1-rank9-sum-empty": {
+   "raised": "RuntimeError",
+   "message": "reduce: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+   "calls": 0,
+   "by_function": {}
+  },
+  "d1-axpy-empty-destination-shape": {
+   "raised": "RuntimeError",
+   "message": "axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2], which does not map element for element onto param; refused before any launch",
+   "calls": 0,
+   "by_function": {}
+  },
+  "d1-rope-table-dtype-empty": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float16 on cpu, sin [2, 2] float32 on cpu, pos0 0)",
+   "calls": 0,
+   "by_function": {}
+  },
+  "d1-rope-table-dtype-swap-empty": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2] bfloat16 on cpu, pos0 0) [pair 0 of 1]",
+   "calls": 0,
+   "by_function": {}
+  }
+ },
+ "child_exits": {
+  "e1-rope_apply-empty-short-sin": 0,
+  "e1-rope_apply-empty-short-cos": 0,
+  "e1-rope_apply-empty-negative-pos0": 0,
+  "e1-rope_apply-zero-D": 0,
+  "e1-export_rope_rows-empty-short-sin": 0,
+  "e1-export_row_pair-empty-short-sin": 0,
+  "e1-export_row_pairs-empty-short-sin": 0,
+  "e1-swap-empty-short-sin": 0,
+  "e1-arena-empty-short-sin": 0,
+  "e1c-rope_apply-reading-short-sin": 0,
+  "e1c-rope_apply-reading-negative-pos0": 0,
+  "e1c-rope_apply-reading-covering": 0,
+  "e2-rope_apply-sin-T-D-1": 0,
+  "e2-rope_apply-cos-T-D-1-1-empty": 0,
+  "e2-export_rope_rows-sin-T-D-1-empty": 0,
+  "e2-swap-sin-T-D-1-empty": 0,
+  "e2c-sin-trailing-2": 0,
+  "e2c-sin-rank1": 0,
+  "e2c-cos-leading-1": 0,
+  "e2c-sin-wrong-D": 0,
+  "e3-sum-duplicate": 0,
+  "e3-sum-out-of-range": 0,
+  "e3-sum-negative-duplicate": 0,
+  "e3-sum-negative-out-of-range": 0,
+  "e3-sum-rank0-axis": 0,
+  "e3-sum-empty-duplicate": 0,
+  "e3-mean-duplicate": 0,
+  "e3-mean-out-of-range": 0,
+  "e3-max-duplicate": 0,
+  "e3-min-out-of-range": 0,
+  "e3-prod-duplicate": 0,
+  "e3-var-out-of-range": 0,
+  "e3-std-duplicate": 0,
+  "e3-softmax-out-of-range": 0,
+  "e3-log_softmax-out-of-range": 0,
+  "e3-argmax-out-of-range": 0,
+  "e3-argmin-out-of-range": 0,
+  "e3c-sum-valid-negative": 0,
+  "e3c-sum-two-distinct": 0,
+  "e3c-mean-valid": 0,
+  "e3c-argmax-valid": 0,
+  "e4-splice-byte-bound": 0,
+  "e4-swap-pair1-byte-bound": 0,
+  "e4-arena-layer1-byte-bound": 0,
+  "e4c-splice-fits": 0,
+  "d1-where-empty-mixed-dtype": 0,
+  "d1-where-all-true-mixed-dtype": 0,
+  "d1-rank9-binary-empty": 0,
+  "d1-rank9-compare-empty": 0,
+  "d1-rank9-where-empty": 0,
+  "d1-rank9-expand-empty": 0,
+  "d1-rank9-masked_fill-empty": 0,
+  "d1-rank9-axpy-empty": 0,
+  "d1-rank9-sum-empty": 0,
+  "d1-axpy-empty-destination-shape": 0,
+  "d1-rope-table-dtype-empty": 0,
+  "d1-rope-table-dtype-swap-empty": 0,
+  "__control__": 0
+ },
+ "control_calls": 4,
+ "tensor_cuda_file": "/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_bwdf1/tensor_cuda/build-bwdf1/F3/pkg/tensor_cuda/__init__.py",
+ "child_exit": 0
+}

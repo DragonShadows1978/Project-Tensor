@@ -1054,9 +1054,14 @@ Tensor sum(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
 }
 Tensor mean(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
   int64_t cnt = 1;
-  int nd = a.ndim();
+  // BWD-F3 E3 (review BWDF1R2-F06 and its successor "mean computes unchecked geometry"): the axes are normalized,
+  // range-checked and refused when repeated (NumPy's rule, tc::normalize_reduce_axes) before the count below reads
+  // a.shape()[d]. Before, mean([5]) on a rank-1 tensor read the shape vector past its end, and mean([0, 0]) counted
+  // the axis twice, before sum's own checks ran. Valid, distinct axes give the same normalized values, so the count
+  // and the result are unchanged. Prior art: NumPy's normalize_axis_tuple ("duplicate value in axis").
+  const std::vector<int> nax = tc::normalize_reduce_axes("mean", axes, a.shape());
   if (axes.empty()) cnt = a.data().numel();
-  else for (int ax : axes) { int d = ax < 0 ? ax + nd : ax; cnt *= a.shape()[d]; }
+  else for (int d : nax) cnt *= a.shape()[d];
   return mul_scalar(sum(a, axes, keepdim), 1.0 / (double)cnt);
 }
 

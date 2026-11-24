@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -8795,7 +8795,7 @@
+ // size-one axes leaves the same contiguous buffer (no specific prior art known to me for its use here). Ours: the
+ // shared validator, its term order and the reads condition on the span.
+ static bool rope_table_layout_ok(const NDArray& t, int64_t D) {
+-  if (t.ndim() < 2 || t.shape[1] != D) return false;
++  if (t.ndim() != 2 || t.shape[1] != D) return false;  // MUTANT p02_trailing_singleton_table_refused
+   for (int i = 2; i < t.ndim(); ++i)
+     if (t.shape[i] != 1) return false;
+   return true;

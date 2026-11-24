@@ -136,10 +136,8 @@ ROWS = [
      "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)", ["export_rope_rows: tables must be (T, D)", "[0, 3]"]),
     ("export_rope_rows-sin-rank", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,))",
      "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)", ["export_rope_rows: tables must be (T, D)", "[0]"]),
-    ("export_rope_rows-pos-negative", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
-     "tc.export_rope_rows(c, cs, sn, 1, 0, 0, -1)", ["export_rope_rows: position past table end", "pos0 -1"]),
-    ("export_rope_rows-past-cos", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
-     "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)", ["export_rope_rows: position past table end", "[0, 2]"]),
+    # BWD-F3 E1: export_rope_rows-pos-negative and export_rope_rows-past-cos moved to E1_ROWS below (an empty export
+    # reads no table row; the reading span refusals are GPU rows, scripts/bwdf3_step_p2.py e1).
     # the batched pair ops: pair 1 is the bad one. BWD-F2 R9 (review BWDF1R1-F06): these are refusal rows only; they
     # make no ordering claim. Pair 0 here has no elements, so Build B's serial loop also made no CUDA call before
     # refusing pair 1, and on the CPU no pair can be built that would allocate or launch (a CUDA operand with
@@ -263,6 +261,35 @@ def r1_results(tmp_path_factory):
 def test_cpu_r1_no_op_member_not_refused(r1_results, rid):
     import test_bwdf2_fixes as T2
     row, r = r1_results[rid]
+    why = T2.verdict(row, r)
+    assert why is None, (rid, why)
+
+
+# BWD-F3 E1 (artifacts/bwdf1/f3/INTENDED_CHANGES_F3.json): two BWD-F1 refusal rows whose export has no output rows
+# (an empty cache). The validator bounds the read span only when the kernel reads, so each returns its empty result
+# with 0 CUDA calls (export_rope_rows-pos-negative: Build B's result; export_rope_rows-past-cos: Build B refused it).
+E1_ROWS = [
+    ("export_rope_rows-pos-negative", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+     "tc.export_rope_rows(c, cs, sn, 1, 0, 0, -1)", (0, 0, 2)),
+    ("export_rope_rows-past-cos", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+     "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)", (0, 1, 2)),
+]
+
+
+@pytest.fixture(scope="module")
+def e1_results(tmp_path_factory):
+    import test_bwdf2_fixes as T2
+    rows = [(rid, "E1", "accept", setup, call, list(want), {"no_grad": 1}, "refuses (BWD-F1, BWD-F2)")
+            for rid, op, setup, call, want in E1_ROWS]
+    res = T2.run_rows(PKG_PARENT, str(tmp_path_factory.mktemp("bwdf1_copy_e1")), rows)
+    assert res["control_calls"] > 0, res
+    return {r[0]: (r, res["results"].get(r[0])) for r in rows}
+
+
+@pytest.mark.parametrize("rid", [r[0] for r in E1_ROWS])
+def test_cpu_e1_empty_export_span_not_refused(e1_results, rid):
+    import test_bwdf2_fixes as T2
+    row, r = e1_results[rid]
     why = T2.verdict(row, r)
     assert why is None, (rid, why)
 

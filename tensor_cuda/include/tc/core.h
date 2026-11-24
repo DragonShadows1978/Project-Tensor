@@ -51,6 +51,11 @@ using Shape = std::vector<int64_t>;
 // entry points refuse such shapes first (bindings.cpp, the zero-extent rule).
 int64_t numel_of(const Shape& shape);
 Shape contiguous_strides(const Shape& shape);
+// BWD-F3 E4 (review BWDF1R2-F07): the NDArray constructor's byte bound as an allocation-free function. Refuses a
+// negative extent (std::invalid_argument) and a shape whose bytes, counting a zero extent as 1, exceed int64
+// (std::overflow_error), with the constructor's texts; returns the bytes the constructor allocates (0 for an empty
+// shape). The constructor calls it, so a preflight that calls it refuses exactly what construction would refuse.
+size_t ndarray_checked_nbytes(const Shape& shape, DType dtype);
 
 // --------------------------------------------------------------------- Storage
 // Reference-counted device (or host) memory buffer.
@@ -175,6 +180,13 @@ NDArray reduce_to(const NDArray& a, const Shape& target);
 
 // argmax/argmin along a single axis (returns int64, axis removed).
 NDArray reduce_arg(const NDArray& a, int axis, bool is_max);
+// BWD-F3 E3 (review BWDF1R2-F06): NumPy's reduction-axis rule for every reduction entry. Each axis is normalized
+// (a negative axis counts from the end) and range-checked against `nd`, and a repeated axis is refused, before the
+// caller indexes a shape or writes a launch-spec slot. Refusals: std::out_of_range "<op>: axis <a> is out of bounds
+// for array of dimension <nd>" (Python IndexError) and std::invalid_argument "<op>: duplicate value in axis"
+// (Python ValueError), each followed by the axes and the operand's shape. Returns the normalized axes in the given
+// order (an empty list stays empty: the callers read it as "every axis").
+std::vector<int> normalize_reduce_axes(const char* op, const std::vector<int>& axes, const Shape& shape);
 // Block-per-row argmax over the LAST axis only (returns int64, axis removed).
 // Decode-loop fast path (Phase 1.1): grid-stride + warp-shuffle reduction so
 // a single row (e.g. one decode step's vocab-sized logits) still parallelizes

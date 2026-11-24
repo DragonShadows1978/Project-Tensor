@@ -36,20 +36,23 @@ BIG = 2 ** 62
 # (id, finding, kind, setup, call, expectation, flags, Build E's expected behaviour)
 ROWS = [
     # ---- F01 / R3: both tables' read spans (sin), subtraction-based, negative pos0
-    ("f01-rope_apply-short-sin", "F01", "refuse", "x=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
-     "tc.rope_apply(x, cs, sn, 0)", ["rope_apply: position past table end", "sin [1, 2]"], {},
+    # BWD-F3 E1 (artifacts/bwdf1/f3/INTENDED_CHANGES_F3.json): the empty-launch rows below (x, inserts or the export's
+    # output have no elements) read no table row and now pass; the reading cases stay refused (BWD-F3's P1 rows and
+    # the GPU rows of scripts/bwdf2_step_k2.py f01 and scripts/bwdf3_step_p2.py e1).
+    ("f01-rope_apply-short-sin", "F01 (BWD-F3 E1: accepted)", "accept", "x=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+     "tc.rope_apply(x, cs, sn, 0)", [0, 2, 2], {},
      "returns (only cos's span was checked)"),
-    ("f01-swap-short-sin", "F01", "refuse",
+    ("f01-swap-short-sin", "F01 (BWD-F3 E1: accepted)", "accept",
      "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
      "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
-     ["rope_apply: position past table end", "sin [1, 2]", "[pair 0 of 1]"], {NG: 1},
+     "tuple", {NG: 1},
      "returns (the preflight checked cos only)"),
-    ("f01-arena-short-sin", "F01", "refuse",
+    ("f01-arena-short-sin", "F01 (BWD-F3 E1: accepted)", "accept",
      "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
      "tc.arena_row_pair_transaction([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 4)",
-     ["rope_apply: position past table end", "sin [1, 2]"], {NG: 1}, "returns (delegates to the swap preflight)"),
-    ("f01-rope_apply-negative-pos0", "F01", "refuse", "x=C((0,2,2)); cs=H((4,2)); sn=H((4,2))",
-     "tc.rope_apply(x, cs, sn, -1)", ["rope_apply: position past table end", "pos0 -1"], {},
+     "tuple", {NG: 1}, "returns (delegates to the swap preflight)"),
+    ("f01-rope_apply-negative-pos0", "F01 (BWD-F3 E1: accepted)", "accept", "x=C((0,2,2)); cs=H((4,2)); sn=H((4,2))",
+     "tc.rope_apply(x, cs, sn, -1)", [0, 2, 2], {},
      "returns (pos0 + L <= cos rows passed)"),
     ("f01-rope_apply-tables-cover", "F01 control", "accept", "x=C((0,2,2)); cs=H((2,2)); sn=H((2,2))",
      "tc.rope_apply(x, cs, sn, 0)", [0, 2, 2], {}, "same"),
@@ -57,8 +60,9 @@ ROWS = [
     ("f05-rope_apply-uint8-launch-dtype", "F05", "refuse", "x=H((1,2,2),'uint8'); cs=H((2,2),'uint8'); sn=H((2,2),'uint8')",
      "tc.rope_apply(x, cs, sn, 0)", ["rope_apply: op supports float32/float16/bfloat16 only", "x [1, 2, 2] uint8"], {},
      "refuses after allocating the output, with the bare dispatch text"),
-    ("f05-export_row_pair-rope-side", "F05", "refuse", "r=C((0,4,2)); p=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
-     "tc.export_row_pair(r, p, cs, sn, 1, 1, 0, 0, 1, 0)", ["export_rope_rows: position past table end"], {NG: 1},
+    ("f05-export_row_pair-rope-side", "F05 (BWD-F3 E1: accepted)", "accept",
+     "r=C((0,4,2)); p=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+     "tc.export_row_pair(r, p, cs, sn, 1, 1, 0, 0, 1, 0)", "tuple", {NG: 1},
      "same on the CPU (the raw export of an empty cache makes no call); the work-before-refusal is a GPU row"),
     # ---- F02 / R2: the rank ceiling of the fixed-size metadata arrays
     ("f02-stack-rank8-to-9", "F02", "refuse", "a=C((1,1,1,1,1,1,1,0)); b=C((1,1,1,1,1,1,1,0))", "tc.stack([a, b], 0)",
@@ -109,8 +113,10 @@ ROWS = [
      ["CUDA error at where"], {}, "same on the CPU; the condition read is a GPU row"),
     ("f07-masked_fill-bool-mask", "F07 control", "preflight", "m=B([0,1,1,1]); a=H((4,))", "a.masked_fill(m, 2.0)",
      ["CUDA error at where"], {}, "same on the CPU; the mask read is a GPU row"),
-    ("f07-where-empty-mixed-data", "F07 control", "accept", "c=C((0,)); x=C((0,)); y=C((0,),'float16')",
-     "tc.where(c, x, y)", [0], {}, "same"),
+    # BWD-F3 D1 (INTENDED_CHANGES_F3.json): where's x and y must match for every call, an empty one included.
+    ("f07-where-empty-mixed-data", "F07 control (BWD-F3 D1: refused)", "refuse",
+     "c=C((0,)); x=C((0,)); y=C((0,),'float16')",
+     "tc.where(c, x, y)", ["where: x has dtype float32 but y has float16"], {}, "same"),
     # ---- F08 / R7: checked sums and products
     ("f08-cat-sum-overflow", "F08", "refuse", f"a=C((0,{BIG}),'uint8'); b=C((0,{BIG}),'uint8')", "tc.cat([a, b], 1)",
      ["cat: the concatenated extent at dim 1 overflows int64"], {"raises": "OverflowError"},

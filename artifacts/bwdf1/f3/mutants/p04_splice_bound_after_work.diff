@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -8679,7 +8679,7 @@
+   out_shape[d] = checked_add3(head_tokens, insert_shape[d], old_seq - tail_start, "splice_rows: the output extent" + t);
+   // BWD-F3 E4 (BWDF1R2-F07): the output's byte bound, here in the check, so a pair op refuses it before any pair's
+   // allocation or launch (before, only the constructor checked it, after earlier pairs had run).
+-  preflight_out_bound("splice_rows", out_shape, old_cache.dtype, t);
++  // MUTANT p04_splice_bound_after_work: the output's byte bound is left to the constructor (after work)
+   return d;
+ }
+ 

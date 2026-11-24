@@ -1,0 +1,71 @@
+{
+ "order": "BWD-F3 (orders/BWDF3_REV2_FIXES.md) E6",
+ "written_utc": "2026-11-24T04:37:28.930098+00:00",
+ "written_before": "any test after-run on Build F3 (the only Build F3 run before this file was a CPU smoke, no test)",
+ "knobs": "none",
+ "existing_test_changes": [
+  {
+   "test": "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-rope_apply-short-sin]",
+   "rule": "E1",
+   "old": "refuse 'position past table end'",
+   "new": "accept, result [0, 2, 2], 0 CUDA calls",
+   "why": "x [0, 2, 2] reads no table row (the review's F01 case)"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-swap-short-sin]",
+   "rule": "E1",
+   "old": "refuse (pair 0)",
+   "new": "accept (tuple), 0 CUDA calls",
+   "why": "every insert is empty: the swap path reads no table row"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-arena-short-sin]",
+   "rule": "E1",
+   "old": "refuse",
+   "new": "accept (tuple), 0 CUDA calls",
+   "why": "the arena delegates to the swap; empty inserts read no table row"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-rope_apply-negative-pos0]",
+   "rule": "E1",
+   "old": "refuse 'position past table end'",
+   "new": "accept, result [0, 2, 2], 0 CUDA calls",
+   "why": "an empty span passes whatever pos0 (Build B's result)"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f05-export_row_pair-rope-side]",
+   "rule": "E1",
+   "old": "refuse 'export_rope_rows: position past table end'",
+   "new": "accept (tuple), 0 CUDA calls",
+   "why": "the rope export's output [0, 1, 2] reads no table row"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f07-where-empty-mixed-data]",
+   "rule": "D1",
+   "old": "accept [0] (Build B's empty no-op)",
+   "new": "refuse 'where: x has dtype float32 but y has float16', 0 CUDA calls",
+   "why": "D1: where's x and y must match, refused for every call before any work"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf1_copy_ops.py::test_cpu_c3_copy_op_refusal_no_cuda_call[export_rope_rows-pos-negative]",
+   "rule": "E1",
+   "old": "refuse 'export_rope_rows: position past table end'",
+   "new": "moved to the new test ID tests/test_bwdf1_copy_ops.py::test_cpu_e1_empty_export_span_not_refused[export_rope_rows-pos-negative]: accept, result [0, 0, 2], 0 CUDA calls",
+   "why": "the empty export (len 0, empty cache) reads no table row"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf1_copy_ops.py::test_cpu_c3_copy_op_refusal_no_cuda_call[export_rope_rows-past-cos]",
+   "rule": "E1",
+   "old": "refuse 'export_rope_rows: position past table end'",
+   "new": "moved to the new test ID tests/test_bwdf1_copy_ops.py::test_cpu_e1_empty_export_span_not_refused[export_rope_rows-past-cos]: accept, result [0, 1, 2], 0 CUDA calls (Build B refused this one)",
+   "why": "the output [0, 1, 2] has no rows: no table row is read"
+  }
+ ],
+ "existing_test_changes_note": "Test IDs outside this list keep their expectations. The export span refusals that need a reading export (a CUDA cache with elements) are GPU rows in scripts/bwdf3_step_p2.py (mode e1).",
+ "production_tests_changed": [],
+ "production_tests_changed_note": "None predicted: production's tests use (T, D) tables, reading RoPE spans, distinct in-range axes and equal where dtypes (grep of tensor_cuda/tests, tests, tc_signal/tests for the RoPE and splice ops: test_rope_apply.py, test_splice_rows.py, test_export_rows.py, test_apa_sp4g_a2.py). P3 compares per ID; any difference outside BWD-F1's two listed H1 IDs is reported as unintended.",
+ "inherited_intended": [
+  "artifacts/bwdf1/INTENDED_CHANGES.json (BWD-F1's two H1 IDs)",
+  "artifacts/bwdf1/f2/INTENDED_CHANGES_F2.json"
+ ]
+}

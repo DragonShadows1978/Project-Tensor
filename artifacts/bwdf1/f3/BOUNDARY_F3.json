@@ -1,0 +1,1166 @@
+{
+ "order": "BWD-F3 (orders/BWDF3_REV2_FIXES.md) L60",
+ "measured_by": "scripts/bwdf3_p1.py (Build B 70cd1752, Build F2 5ff79dee, Build F3 per P1_RESULTS.json arms)",
+ "terms": {
+  "E1": {
+   "site": "tensor_cuda/src/kernels.cu rope_tables_check (span term)",
+   "term": "the span [pos0, pos0 + rows) must lie in both tables only when the launch reads (output has elements); an empty launch passes whatever the tables' lengths and pos0",
+   "callers": [
+    "rope_apply (rope_apply_check: reads = x.numel() > 0)",
+    "export_rope_rows / export_row_pair / export_row_pairs (export_rope_rows_check: reads = the output [.., len, D] has elements)",
+    "swap_row_pairs_with_rope preflight (rope_apply_check per rope insert)",
+    "arena_row_pair_transaction (through the swap preflight)"
+   ],
+   "message": "<op>: position past table end (<operands>) [pair i of n]"
+  },
+  "E2": {
+   "site": "tensor_cuda/src/kernels.cu rope_table_layout_ok / rope_tables_check (layout term)",
+   "term": "each table: rank >= 2, shape[1] == D, every extent after the second is 1 (contiguous [T, D] storage); otherwise refused",
+   "message": "<op>: tables must be (T, D) (<operands>)"
+  },
+  "E3": {
+   "site": "tensor_cuda/src/kernels.cu normalize_reduce_axes (reduce_impl, reduce_arg); tensor_cuda/src/ops.cpp ops::mean",
+   "term": "each axis in [-nd, nd), normalized; a repeated (normalized) axis refused; before any shape read or ReduceSpec write",
+   "message": "IndexError '<op>: axis <a> is out of bounds for array of dimension <nd> (axes [...], operand [...]); refused before any allocation' / ValueError '<op>: duplicate value in axis (...)'",
+   "ops": "<op> is reduce (sum, max, min, prod, softmax, log_softmax, every ops.cpp wrapper over reduce_impl), mean (mean, var, std), argmax / argmin"
+  },
+  "E4": {
+   "site": "tensor_cuda/src/kernels.cu preflight_out_bound (splice_rows_check; also export_rows_check, evict_rows_check, export_rope_rows_check, rope_apply_check, where it cannot fire)",
+   "term": "the output shape's byte bound (ndarray_checked_nbytes, the NDArray constructor's own function) in the preflight, before any pair's work",
+   "message": "OverflowError 'splice_rows: the output NDArray: byte size overflows int64 for shape [...] and dtype <dt> (nonzero extents count next to zero) (<operands>) [pair i of n]'"
+  },
+  "D1": {
+   "site": "where_nd (x/y dtype, every call); check_meta_rank (14 sites, BWD-F2 R2, unchanged); rope_tables_check (table/data dtype, every call, unchanged); axpy_ (destination shape, unchanged)",
+   "term": "refused before any work even where Build B returned an empty no-op",
+   "label": "domain refusal"
+  }
+ },
+ "rows": {
+  "e1-rope_apply-empty-short-sin": {
+   "class": "E1",
+   "rule": "E1",
+   "label": "restored Build B acceptance",
+   "setup": "x=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    0,
+    2,
+    2
+   ],
+   "Build_B": "returned [0, 2, 2] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "Build_F3": "returned [0, 2, 2] (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e1-rope_apply-empty-short-cos": {
+   "class": "E1",
+   "rule": "E1",
+   "label": "new acceptance (Build B refused)",
+   "setup": "x=C((0,2,2)); cs=H((1,2)); sn=H((2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    0,
+    2,
+    2
+   ],
+   "Build_B": "RuntimeError: rope_apply: position past table end (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [1, 2] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "Build_F3": "returned [0, 2, 2] (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e1-rope_apply-empty-negative-pos0": {
+   "class": "E1",
+   "rule": "E1",
+   "label": "restored Build B acceptance",
+   "setup": "x=C((0,2,2)); cs=H((4,2)); sn=H((4,2))",
+   "call": "tc.rope_apply(x, cs, sn, -1)",
+   "expect_F3": [
+    0,
+    2,
+    2
+   ],
+   "Build_B": "returned [0, 2, 2] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [4, 2] float32 on cpu, sin [4, 2] float32 on cpu, pos0 -1) (CUDA calls 0)",
+   "Build_F3": "returned [0, 2, 2] (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e1-rope_apply-zero-D": {
+   "class": "E1",
+   "rule": "E1",
+   "label": "new acceptance (Build B refused)",
+   "setup": "x=C((2,3,0)); cs=H((1,0)); sn=H((1,0))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    2,
+    3,
+    0
+   ],
+   "Build_B": "RuntimeError: rope_apply: position past table end (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: position past table end (x [2, 3, 0] float32 on cuda:0, cos [1, 0] float32 on cpu, sin [1, 0] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "Build_F3": "returned [2, 3, 0] (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e1-export_rope_rows-empty-short-sin": {
+   "class": "E1",
+   "rule": "E1",
+   "label": "restored Build B acceptance",
+   "setup": "c=C((0,4,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.export_rope_rows(c, cs, sn, 1, 0, 2, 0)",
+   "expect_F3": [
+    0,
+    2,
+    2
+   ],
+   "Build_B": "returned [0, 2, 2] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [2, 2] float32 on cpu, operand 2 sin [1, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0) (CUDA calls 0)",
+   "Build_F3": "returned [0, 2, 2] (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e1-export_row_pair-empty-short-sin": {
+   "class": "E1",
+   "rule": "E1",
+   "label": "restored Build B acceptance",
+   "setup": "r=C((0,4,2)); p=C((0,4,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.export_row_pair(r, p, cs, sn, 1, 1, 0, 0, 2, 0)",
+   "expect_F3": "tuple",
+   "Build_B": "returned tuple (CUDA calls 0)",
+   "Build_F2": "RuntimeError: export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [2, 2] float32 on cpu, operand 2 sin [1, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0) (CUDA calls 0)",
+   "Build_F3": "returned tuple (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e1-export_row_pairs-empty-short-sin": {
+   "class": "E1",
+   "rule": "E1",
+   "label": "restored Build B acceptance",
+   "setup": "r0=C((0,4,2)); p0=C((0,4,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.export_row_pairs([r0], [p0], cs, sn, 1, 1, [0], [0], 2, 0)",
+   "expect_F3": "tuple",
+   "Build_B": "returned tuple (CUDA calls 0)",
+   "Build_F2": "RuntimeError: export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [2, 2] float32 on cpu, operand 2 sin [1, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0) [pair 0 of 1] (CUDA calls 0)",
+   "Build_F3": "returned tuple (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e1-swap-empty-short-sin": {
+   "class": "E1",
+   "rule": "E1",
+   "label": "restored Build B acceptance",
+   "setup": "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   "expect_F3": "tuple",
+   "Build_B": "returned tuple (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) [pair 0 of 1] (CUDA calls 0)",
+   "Build_F3": "returned tuple (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e1-arena-empty-short-sin": {
+   "class": "E1",
+   "rule": "E1",
+   "label": "restored Build B acceptance",
+   "setup": "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.arena_row_pair_transaction([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 4)",
+   "expect_F3": "tuple",
+   "Build_B": "returned tuple (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) [pair 0 of 1] (CUDA calls 0)",
+   "Build_F3": "returned tuple (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e1c-rope_apply-reading-short-sin": {
+   "class": "E1 control",
+   "rule": "E1",
+   "label": "unchanged from Build F2 (control)",
+   "setup": "x=H((1,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    "rope_apply: position past table end",
+    "sin [1, 2]"
+   ],
+   "Build_B": "RuntimeError: CUDA error at rope_apply: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: rope_apply: position past table end (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "Build_F3": "RuntimeError: rope_apply: position past table end (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "e1c-rope_apply-reading-negative-pos0": {
+   "class": "E1 control",
+   "rule": "E1",
+   "label": "unchanged from Build F2 (control)",
+   "setup": "x=H((1,2,2)); cs=H((4,2)); sn=H((4,2))",
+   "call": "tc.rope_apply(x, cs, sn, -1)",
+   "expect_F3": [
+    "rope_apply: position past table end",
+    "pos0 -1"
+   ],
+   "Build_B": "RuntimeError: CUDA error at rope_apply: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: rope_apply: position past table end (x [1, 2, 2] float32 on cpu, cos [4, 2] float32 on cpu, sin [4, 2] float32 on cpu, pos0 -1) (CUDA calls 0)",
+   "Build_F3": "RuntimeError: rope_apply: position past table end (x [1, 2, 2] float32 on cpu, cos [4, 2] float32 on cpu, sin [4, 2] float32 on cpu, pos0 -1) (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "e1c-rope_apply-reading-covering": {
+   "class": "E1 control",
+   "rule": "E1",
+   "label": "unchanged from Build F2 (control)",
+   "setup": "x=H((1,2,2)); cs=H((2,2)); sn=H((2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    "CUDA error at rope_apply"
+   ],
+   "Build_B": "RuntimeError: CUDA error at rope_apply: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at rope_apply: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "RuntimeError: CUDA error at rope_apply: no CUDA-capable device is detected (CUDA calls 5)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "e2-rope_apply-sin-T-D-1": {
+   "class": "E2",
+   "rule": "E2",
+   "label": "restored Build B acceptance",
+   "setup": "x=H((1,2,2)); cs=H((2,2)); sn=H((2,2,1))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    "CUDA error at rope_apply"
+   ],
+   "Build_B": "RuntimeError: CUDA error at rope_apply: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 2, 1] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "Build_F3": "RuntimeError: CUDA error at rope_apply: no CUDA-capable device is detected (CUDA calls 5)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e2-rope_apply-cos-T-D-1-1-empty": {
+   "class": "E2",
+   "rule": "E2",
+   "label": "new acceptance (Build B refused)",
+   "setup": "x=C((0,2,2)); cs=H((2,2,1,1)); sn=H((2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    0,
+    2,
+    2
+   ],
+   "Build_B": "RuntimeError: rope_apply: tables must be (T, D) (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2, 1, 1] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "Build_F3": "returned [0, 2, 2] (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e2-export_rope_rows-sin-T-D-1-empty": {
+   "class": "E2",
+   "rule": "E2",
+   "label": "restored Build B acceptance",
+   "setup": "c=C((0,4,2)); cs=H((8,2)); sn=H((8,2,1))",
+   "call": "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)",
+   "expect_F3": [
+    0,
+    1,
+    2
+   ],
+   "Build_B": "returned [0, 1, 2] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: export_rope_rows: tables must be (T, D) (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [8, 2] float32 on cpu, operand 2 sin [8, 2, 1] float32 on cpu, dim 1, start 0, length 1, pos0 0) (CUDA calls 0)",
+   "Build_F3": "returned [0, 1, 2] (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e2-swap-sin-T-D-1-empty": {
+   "class": "E2",
+   "rule": "E2",
+   "label": "restored Build B acceptance",
+   "setup": "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((2,2,1))",
+   "call": "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   "expect_F3": "tuple",
+   "Build_B": "returned tuple (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2, 1] float32 on cpu, pos0 0) [pair 0 of 1] (CUDA calls 0)",
+   "Build_F3": "returned tuple (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e2c-sin-trailing-2": {
+   "class": "E2 control",
+   "rule": "E2",
+   "label": "unchanged from Build F2 (control)",
+   "setup": "x=C((0,2,2)); cs=H((2,2)); sn=H((2,2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    "rope_apply: tables must be (T, D)",
+    "sin [2, 2, 2]"
+   ],
+   "Build_B": "returned [0, 2, 2] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "Build_F3": "RuntimeError: rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "e2c-sin-rank1": {
+   "class": "E2 control",
+   "rule": "E2",
+   "label": "unchanged from Build F2 (control)",
+   "setup": "x=C((0,2,2)); cs=H((2,2)); sn=H((2,))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    "rope_apply: tables must be (T, D)",
+    "sin [2]"
+   ],
+   "Build_B": "RuntimeError: rope_apply: tables must be (T, D) (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "Build_F3": "RuntimeError: rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "e2c-cos-leading-1": {
+   "class": "E2 control",
+   "rule": "E2",
+   "label": "unchanged from Build F2 (control)",
+   "setup": "x=C((0,2,2)); cs=H((1,2,2)); sn=H((2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    "rope_apply: tables must be (T, D)",
+    "cos [1, 2, 2]"
+   ],
+   "Build_B": "RuntimeError: rope_apply: tables must be (T, D) (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [1, 2, 2] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "Build_F3": "RuntimeError: rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [1, 2, 2] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "e2c-sin-wrong-D": {
+   "class": "E2 control",
+   "rule": "E2",
+   "label": "unchanged from Build F2 (control)",
+   "setup": "x=H((1,2,2)); cs=H((2,2)); sn=H((2,4,1))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    "rope_apply: tables must be (T, D)",
+    "sin [2, 4, 1]"
+   ],
+   "Build_B": "RuntimeError: rope_apply: tables must be (T, D) (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 4, 1] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "Build_F3": "RuntimeError: rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 4, 1] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "e3-sum-duplicate": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,))",
+   "call": "a.sum([0, 0])",
+   "expect_F3": [
+    "reduce: duplicate value in axis",
+    "axes [0, 0]",
+    "operand [2]"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "ValueError: reduce: duplicate value in axis (axes [0, 0], operand [2]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-sum-out-of-range": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,))",
+   "call": "a.sum([8])",
+   "expect_F3": [
+    "reduce: axis 8 is out of bounds for array of dimension 1"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "IndexError: reduce: axis 8 is out of bounds for array of dimension 1 (axes [8], operand [2]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-sum-negative-duplicate": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,3))",
+   "call": "a.sum([1, -1])",
+   "expect_F3": [
+    "reduce: duplicate value in axis",
+    "axes [1, -1]"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "ValueError: reduce: duplicate value in axis (axes [1, -1], operand [2, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-sum-negative-out-of-range": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,3))",
+   "call": "a.sum([-3])",
+   "expect_F3": [
+    "reduce: axis -3 is out of bounds for array of dimension 2"
+   ],
+   "Build_B": "process died (signal 6)",
+   "Build_F2": "process died (signal 6)",
+   "Build_F3": "IndexError: reduce: axis -3 is out of bounds for array of dimension 2 (axes [-3], operand [2, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-sum-rank0-axis": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((1,)).reshape([])",
+   "call": "a.sum([0])",
+   "expect_F3": [
+    "reduce: axis 0 is out of bounds for array of dimension 0"
+   ],
+   "Build_B": "process died (signal 11)",
+   "Build_F2": "process died (signal 11)",
+   "Build_F3": "IndexError: reduce: axis 0 is out of bounds for array of dimension 0 (axes [0], operand []); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-sum-empty-duplicate": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: returned)",
+   "setup": "a=C((0,3))",
+   "call": "a.sum([1, 1])",
+   "expect_F3": [
+    "reduce: duplicate value in axis"
+   ],
+   "Build_B": "returned [0] (CUDA calls 0)",
+   "Build_F2": "returned [0] (CUDA calls 0)",
+   "Build_F3": "ValueError: reduce: duplicate value in axis (axes [1, 1], operand [0, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-mean-duplicate": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,3))",
+   "call": "a.mean([0, 0])",
+   "expect_F3": [
+    "mean: duplicate value in axis",
+    "axes [0, 0]"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "ValueError: mean: duplicate value in axis (axes [0, 0], operand [2, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-mean-out-of-range": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,))",
+   "call": "a.mean([5])",
+   "expect_F3": [
+    "mean: axis 5 is out of bounds for array of dimension 1"
+   ],
+   "Build_B": "process died (signal 6)",
+   "Build_F2": "process died (signal 11)",
+   "Build_F3": "IndexError: mean: axis 5 is out of bounds for array of dimension 1 (axes [5], operand [2]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-max-duplicate": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,3))",
+   "call": "a.max([1, 1])",
+   "expect_F3": [
+    "reduce: duplicate value in axis"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "ValueError: reduce: duplicate value in axis (axes [1, 1], operand [2, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-min-out-of-range": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,3))",
+   "call": "a.min([2])",
+   "expect_F3": [
+    "reduce: axis 2 is out of bounds for array of dimension 2"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "IndexError: reduce: axis 2 is out of bounds for array of dimension 2 (axes [2], operand [2, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-prod-duplicate": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,3))",
+   "call": "a.prod([-2, 0])",
+   "expect_F3": [
+    "reduce: duplicate value in axis"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "ValueError: reduce: duplicate value in axis (axes [-2, 0], operand [2, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-var-out-of-range": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,3))",
+   "call": "a.var([3])",
+   "expect_F3": [
+    "mean: axis 3 is out of bounds for array of dimension 2"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "process died (signal 6)",
+   "Build_F3": "IndexError: mean: axis 3 is out of bounds for array of dimension 2 (axes [3], operand [2, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-std-duplicate": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,3))",
+   "call": "a.std([1, 1])",
+   "expect_F3": [
+    "mean: duplicate value in axis"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "ValueError: mean: duplicate value in axis (axes [1, 1], operand [2, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-softmax-out-of-range": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,3))",
+   "call": "a.softmax(-3)",
+   "expect_F3": [
+    "reduce: axis -3 is out of bounds for array of dimension 2"
+   ],
+   "Build_B": "process died (signal 6)",
+   "Build_F2": "process died (signal 6)",
+   "Build_F3": "IndexError: reduce: axis -3 is out of bounds for array of dimension 2 (axes [-3], operand [2, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-log_softmax-out-of-range": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,3))",
+   "call": "a.log_softmax(2)",
+   "expect_F3": [
+    "reduce: axis 2 is out of bounds for array of dimension 2"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "IndexError: reduce: axis 2 is out of bounds for array of dimension 2 (axes [2], operand [2, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-argmax-out-of-range": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,3))",
+   "call": "a.argmax(2)",
+   "expect_F3": [
+    "argmax: axis 2 is out of bounds for array of dimension 2"
+   ],
+   "Build_B": "RuntimeError: CUDA error at arg: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at arg: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "IndexError: argmax: axis 2 is out of bounds for array of dimension 2 (axes [2], operand [2, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3-argmin-out-of-range": {
+   "class": "E3",
+   "rule": "E3",
+   "label": "new refusal (Build B: did not refuse on the host)",
+   "setup": "a=H((2,3))",
+   "call": "a.argmin(-3)",
+   "expect_F3": [
+    "argmin: axis -3 is out of bounds for array of dimension 2"
+   ],
+   "Build_B": "RuntimeError: CUDA error at arg: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at arg: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "IndexError: argmin: axis -3 is out of bounds for array of dimension 2 (axes [-3], operand [2, 3]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e3c-sum-valid-negative": {
+   "class": "E3 control",
+   "rule": "E3",
+   "label": "unchanged from Build F2 (control)",
+   "setup": "a=H((2,3))",
+   "call": "a.sum([-1])",
+   "expect_F3": [
+    "CUDA error at reduce_lastdim"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "e3c-sum-two-distinct": {
+   "class": "E3 control",
+   "rule": "E3",
+   "label": "unchanged from Build F2 (control)",
+   "setup": "a=H((2,3,4))",
+   "call": "a.sum([2, 0])",
+   "expect_F3": [
+    "CUDA error at reduce"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "RuntimeError: CUDA error at reduce: no CUDA-capable device is detected (CUDA calls 5)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "e3c-mean-valid": {
+   "class": "E3 control",
+   "rule": "E3",
+   "label": "unchanged from Build F2 (control)",
+   "setup": "a=H((2,3))",
+   "call": "a.mean([0, 1])",
+   "expect_F3": [
+    "CUDA error at reduce_lastdim"
+   ],
+   "Build_B": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected (CUDA calls 5)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "e3c-argmax-valid": {
+   "class": "E3 control",
+   "rule": "E3",
+   "label": "unchanged from Build F2 (control)",
+   "setup": "a=H((2,3))",
+   "call": "a.argmax(-1)",
+   "expect_F3": [
+    "CUDA error at arg"
+   ],
+   "Build_B": "RuntimeError: CUDA error at arg: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: CUDA error at arg: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F3": "RuntimeError: CUDA error at arg: no CUDA-capable device is detected (CUDA calls 5)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "e4-splice-byte-bound": {
+   "class": "E4",
+   "rule": "E4",
+   "label": "refusal text changed (Build B refused later or with another text)",
+   "setup": "o=C((0,2305843009213693952,2),'uint8'); i=C((0,2305843009213693952,2),'uint8')",
+   "call": "tc.splice_rows(o, i, 1, 0, 0)",
+   "expect_F3": [
+    "splice_rows: the output NDArray: byte size overflows int64",
+    "[0, 4611686018427387904, 2]",
+    "operand 0 old_cache [0, 2305843009213693952, 2]"
+   ],
+   "Build_B": "OverflowError: NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (CUDA calls 0)",
+   "Build_F2": "OverflowError: NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (CUDA calls 0)",
+   "Build_F3": "OverflowError: splice_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 old_cache [0, 2305843009213693952, 2] uint8 on cuda:0, oper (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e4-swap-pair1-byte-bound": {
+   "class": "E4",
+   "rule": "E4",
+   "label": "refusal text changed (Build B refused later or with another text)",
+   "setup": "r0=C((0,4,2),'uint8'); i0=C((0,1,2),'uint8'); r1=C((0,2305843009213693952,2),'uint8'); i1=C((0,2305843009213693952,2),'uint8'); p0=C((0,4,0)); p1=C((0,4,0)); j0=C((0,1,0)); j1=C((0,1,0)); cs=C((1,0)); sn=C((1,0))",
+   "call": "tc.swap_row_pairs_with_rope([r0, r1], [p0, p1], [i0, i1], [j0, j1], cs, sn, 1, 1, 0, 0, 0)",
+   "expect_F3": [
+    "splice_rows: the output NDArray: byte size overflows int64",
+    "[pair 1 of 2]"
+   ],
+   "Build_B": "OverflowError: NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (CUDA calls 0)",
+   "Build_F2": "OverflowError: NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (CUDA calls 0)",
+   "Build_F3": "OverflowError: splice_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 old_cache [0, 2305843009213693952, 2] uint8 on cuda:0, oper (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e4-arena-layer1-byte-bound": {
+   "class": "E4",
+   "rule": "E4",
+   "label": "refusal text changed (Build B refused later or with another text)",
+   "setup": "r0=C((0,4,2),'uint8'); r1=C((0,2305843009213693952,2),'uint8'); p0=C((0,4,0),'uint8'); p1=C((0,4,0),'uint8'); i0=C((0,2305843009213693952,2),'uint8'); i1=C((0,2305843009213693952,2),'uint8'); j0=C((0,2305843009213693952,0),'uint8'); j1=C((0,2305843009213693952,0),'uint8'); cs=C((2305843009213693952,0),'uint8'); sn=C((2305843009213693952,0),'uint8')",
+   "call": "tc.arena_row_pair_transaction([r0, r1], [p0, p1], [i0, i1], [j0, j1], cs, sn, 1, 1, 0, 0, 2305843009213693952)",
+   "expect_F3": [
+    "splice_rows: the output NDArray: byte size overflows int64",
+    "[pair 1 of 2]"
+   ],
+   "Build_B": "OverflowError: NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (CUDA calls 0)",
+   "Build_F2": "OverflowError: NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (CUDA calls 0)",
+   "Build_F3": "OverflowError: splice_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 old_cache [0, 2305843009213693952, 2] uint8 on cuda:0, oper (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "e4c-splice-fits": {
+   "class": "E4 control",
+   "rule": "E4",
+   "label": "unchanged from Build F2 (control)",
+   "setup": "o=C((0,2305843009213693952,2),'uint8'); i=C((0,1,2),'uint8')",
+   "call": "tc.splice_rows(o, i, 1, 0, 0)",
+   "expect_F3": [
+    0,
+    2305843009213693953,
+    2
+   ],
+   "Build_B": "returned [0, 2305843009213693953, 2] (CUDA calls 0)",
+   "Build_F2": "returned [0, 2305843009213693953, 2] (CUDA calls 0)",
+   "Build_F3": "returned [0, 2305843009213693953, 2] (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-where-empty-mixed-dtype": {
+   "class": "D1 (F05)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "c=C((0,)); x=C((0,)); y=C((0,),'float16')",
+   "call": "tc.where(c, x, y)",
+   "expect_F3": [
+    "where: x has dtype float32 but y has float16"
+   ],
+   "Build_B": "returned [0] (CUDA calls 0)",
+   "Build_F2": "returned [0] (CUDA calls 0)",
+   "Build_F3": "RuntimeError: where: x has dtype float32 but y has float16; the data operands must match (cond [0] float32, x [0] float32, y [0] float16); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "d1-where-all-true-mixed-dtype": {
+   "class": "D1 (F05)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "c=H((2,)); x=H((2,)); y=H((2,),'float16')",
+   "call": "tc.where(c, x, y)",
+   "expect_F3": [
+    "where: x has dtype float32 but y has float16"
+   ],
+   "Build_B": "RuntimeError: CUDA error at where: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: where: x has dtype float32 but y has float16; the data operands must match (cond [2] float32, x [2] float32, y [2] float16); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: where: x has dtype float32 but y has float16; the data operands must match (cond [2] float32, x [2] float32, y [2] float16); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-binary-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,)).reshape([1]*8+[0]); b=C((0,)).reshape([1]*8+[0])",
+   "call": "a + b",
+   "expect_F3": [
+    "ew_binary: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "returned [1, 1, 1, 1, 1, 1, 1, 1, 0] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: ew_binary: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: ew_binary: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-compare-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "a.gt(a)",
+   "expect_F3": [
+    "compare: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "returned [1, 1, 1, 1, 1, 1, 1, 1, 0] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: compare: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: compare: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-where-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "tc.where(a, a, a)",
+   "expect_F3": [
+    "where: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "returned [1, 1, 1, 1, 1, 1, 1, 1, 0] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: where: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (cond [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, x [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, y [1, 1, 1, 1, 1, 1, 1, 1, 0] float32); refused before any alloc (CUDA calls 0)",
+   "Build_F3": "RuntimeError: where: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (cond [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, x [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, y [1, 1, 1, 1, 1, 1, 1, 1, 0] float32); refused before any alloc (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-expand-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,))",
+   "call": "a.expand([1]*8+[0])",
+   "expect_F3": [
+    "broadcast_to: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "returned [1, 1, 1, 1, 1, 1, 1, 1, 0] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: broadcast_to: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (target [1, 1, 1, 1, 1, 1, 1, 1, 0], operand [0]); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: broadcast_to: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (target [1, 1, 1, 1, 1, 1, 1, 1, 0], operand [0]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-masked_fill-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "a.masked_fill(a, 0.0)",
+   "expect_F3": [
+    "masked_fill: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "returned [1, 1, 1, 1, 1, 1, 1, 1, 0] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: masked_fill: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (mask [1, 1, 1, 1, 1, 1, 1, 1, 0], a [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: masked_fill: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (mask [1, 1, 1, 1, 1, 1, 1, 1, 0], a [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-axpy-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "tc._C.axpy_(a, a, 1.0)",
+   "expect_F3": [
+    "axpy_: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "returned None (CUDA calls 1)",
+   "Build_F2": "RuntimeError: axpy_: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (param [1, 1, 1, 1, 1, 1, 1, 1, 0], other [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: axpy_: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (param [1, 1, 1, 1, 1, 1, 1, 1, 0], other [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-sum-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "a.sum()",
+   "expect_F3": [
+    "reduce: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "RuntimeError: cudaMalloc failed: no CUDA-capable device is detected (CUDA calls 4)",
+   "Build_F2": "RuntimeError: reduce: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: reduce: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-axpy-empty-destination-shape": {
+   "class": "D1 (F03)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "p=C((0,1)); o=C((0,2))",
+   "call": "tc._C.axpy_(p, o, 1.0)",
+   "expect_F3": [
+    "axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2]",
+    "does not map element for element"
+   ],
+   "Build_B": "returned None (CUDA calls 1)",
+   "Build_F2": "RuntimeError: axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2], which does not map element for element onto param; refused before any launch (CUDA calls 0)",
+   "Build_F3": "RuntimeError: axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2], which does not map element for element onto param; refused before any launch (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rope-table-dtype-empty": {
+   "class": "D1 (F08)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "x=C((0,2,2)); cs=H((2,2),'float16'); sn=H((2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    "rope_apply: table/x dtype mismatch",
+    "cos [2, 2] float16"
+   ],
+   "Build_B": "RuntimeError: rope_apply: table/x dtype mismatch (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float16 on cpu, sin [2, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "Build_F3": "RuntimeError: rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float16 on cpu, sin [2, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rope-table-dtype-swap-empty": {
+   "class": "D1 (F08)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((2,2),'bfloat16')",
+   "call": "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   "expect_F3": [
+    "rope_apply: table/x dtype mismatch",
+    "[pair 0 of 1]"
+   ],
+   "Build_B": "RuntimeError: rope_apply: table/x dtype mismatch (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2] bfloat16 on cpu, pos0 0) [pair 0 of 1] (CUDA calls 0)",
+   "Build_F3": "RuntimeError: rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2] bfloat16 on cpu, pos0 0) [pair 0 of 1] (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  }
+ },
+ "domain_refusals": {
+  "d1-where-empty-mixed-dtype": {
+   "class": "D1 (F05)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "c=C((0,)); x=C((0,)); y=C((0,),'float16')",
+   "call": "tc.where(c, x, y)",
+   "expect_F3": [
+    "where: x has dtype float32 but y has float16"
+   ],
+   "Build_B": "returned [0] (CUDA calls 0)",
+   "Build_F2": "returned [0] (CUDA calls 0)",
+   "Build_F3": "RuntimeError: where: x has dtype float32 but y has float16; the data operands must match (cond [0] float32, x [0] float32, y [0] float16); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": false
+  },
+  "d1-where-all-true-mixed-dtype": {
+   "class": "D1 (F05)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "c=H((2,)); x=H((2,)); y=H((2,),'float16')",
+   "call": "tc.where(c, x, y)",
+   "expect_F3": [
+    "where: x has dtype float32 but y has float16"
+   ],
+   "Build_B": "RuntimeError: CUDA error at where: no CUDA-capable device is detected (CUDA calls 5)",
+   "Build_F2": "RuntimeError: where: x has dtype float32 but y has float16; the data operands must match (cond [2] float32, x [2] float32, y [2] float16); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: where: x has dtype float32 but y has float16; the data operands must match (cond [2] float32, x [2] float32, y [2] float16); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-binary-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,)).reshape([1]*8+[0]); b=C((0,)).reshape([1]*8+[0])",
+   "call": "a + b",
+   "expect_F3": [
+    "ew_binary: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "returned [1, 1, 1, 1, 1, 1, 1, 1, 0] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: ew_binary: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: ew_binary: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-compare-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "a.gt(a)",
+   "expect_F3": [
+    "compare: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "returned [1, 1, 1, 1, 1, 1, 1, 1, 0] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: compare: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: compare: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-where-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "tc.where(a, a, a)",
+   "expect_F3": [
+    "where: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "returned [1, 1, 1, 1, 1, 1, 1, 1, 0] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: where: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (cond [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, x [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, y [1, 1, 1, 1, 1, 1, 1, 1, 0] float32); refused before any alloc (CUDA calls 0)",
+   "Build_F3": "RuntimeError: where: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (cond [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, x [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, y [1, 1, 1, 1, 1, 1, 1, 1, 0] float32); refused before any alloc (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-expand-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,))",
+   "call": "a.expand([1]*8+[0])",
+   "expect_F3": [
+    "broadcast_to: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "returned [1, 1, 1, 1, 1, 1, 1, 1, 0] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: broadcast_to: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (target [1, 1, 1, 1, 1, 1, 1, 1, 0], operand [0]); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: broadcast_to: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (target [1, 1, 1, 1, 1, 1, 1, 1, 0], operand [0]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-masked_fill-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "a.masked_fill(a, 0.0)",
+   "expect_F3": [
+    "masked_fill: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "returned [1, 1, 1, 1, 1, 1, 1, 1, 0] (CUDA calls 0)",
+   "Build_F2": "RuntimeError: masked_fill: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (mask [1, 1, 1, 1, 1, 1, 1, 1, 0], a [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: masked_fill: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (mask [1, 1, 1, 1, 1, 1, 1, 1, 0], a [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-axpy-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "tc._C.axpy_(a, a, 1.0)",
+   "expect_F3": [
+    "axpy_: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "returned None (CUDA calls 1)",
+   "Build_F2": "RuntimeError: axpy_: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (param [1, 1, 1, 1, 1, 1, 1, 1, 0], other [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: axpy_: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (param [1, 1, 1, 1, 1, 1, 1, 1, 0], other [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rank9-sum-empty": {
+   "class": "D1 (F04)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "a.sum()",
+   "expect_F3": [
+    "reduce: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "Build_B": "RuntimeError: cudaMalloc failed: no CUDA-capable device is detected (CUDA calls 4)",
+   "Build_F2": "RuntimeError: reduce: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "Build_F3": "RuntimeError: reduce: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-axpy-empty-destination-shape": {
+   "class": "D1 (F03)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "p=C((0,1)); o=C((0,2))",
+   "call": "tc._C.axpy_(p, o, 1.0)",
+   "expect_F3": [
+    "axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2]",
+    "does not map element for element"
+   ],
+   "Build_B": "returned None (CUDA calls 1)",
+   "Build_F2": "RuntimeError: axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2], which does not map element for element onto param; refused before any launch (CUDA calls 0)",
+   "Build_F3": "RuntimeError: axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2], which does not map element for element onto param; refused before any launch (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rope-table-dtype-empty": {
+   "class": "D1 (F08)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "x=C((0,2,2)); cs=H((2,2),'float16'); sn=H((2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect_F3": [
+    "rope_apply: table/x dtype mismatch",
+    "cos [2, 2] float16"
+   ],
+   "Build_B": "RuntimeError: rope_apply: table/x dtype mismatch (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float16 on cpu, sin [2, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "Build_F3": "RuntimeError: rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float16 on cpu, sin [2, 2] float32 on cpu, pos0 0) (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  },
+  "d1-rope-table-dtype-swap-empty": {
+   "class": "D1 (F08)",
+   "rule": "D1",
+   "label": "domain refusal",
+   "setup": "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((2,2),'bfloat16')",
+   "call": "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   "expect_F3": [
+    "rope_apply: table/x dtype mismatch",
+    "[pair 0 of 1]"
+   ],
+   "Build_B": "RuntimeError: rope_apply: table/x dtype mismatch (CUDA calls 0)",
+   "Build_F2": "RuntimeError: rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2] bfloat16 on cpu, pos0 0) [pair 0 of 1] (CUDA calls 0)",
+   "Build_F3": "RuntimeError: rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2] bfloat16 on cpu, pos0 0) [pair 0 of 1] (CUDA calls 0)",
+   "F3_holds": true,
+   "F2_holds": true
+  }
+ },
+ "inherited_rows_changed": [
+  {
+   "test": "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-rope_apply-short-sin]",
+   "rule": "E1",
+   "old": "refuse 'position past table end'",
+   "new": "accept, result [0, 2, 2], 0 CUDA calls",
+   "why": "x [0, 2, 2] reads no table row (the review's F01 case)"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-swap-short-sin]",
+   "rule": "E1",
+   "old": "refuse (pair 0)",
+   "new": "accept (tuple), 0 CUDA calls",
+   "why": "every insert is empty: the swap path reads no table row"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-arena-short-sin]",
+   "rule": "E1",
+   "old": "refuse",
+   "new": "accept (tuple), 0 CUDA calls",
+   "why": "the arena delegates to the swap; empty inserts read no table row"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f01-rope_apply-negative-pos0]",
+   "rule": "E1",
+   "old": "refuse 'position past table end'",
+   "new": "accept, result [0, 2, 2], 0 CUDA calls",
+   "why": "an empty span passes whatever pos0 (Build B's result)"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f05-export_row_pair-rope-side]",
+   "rule": "E1",
+   "old": "refuse 'export_rope_rows: position past table end'",
+   "new": "accept (tuple), 0 CUDA calls",
+   "why": "the rope export's output [0, 1, 2] reads no table row"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf2_fixes.py::test_cpu_k1_row[f07-where-empty-mixed-data]",
+   "rule": "D1",
+   "old": "accept [0] (Build B's empty no-op)",
+   "new": "refuse 'where: x has dtype float32 but y has float16', 0 CUDA calls",
+   "why": "D1: where's x and y must match, refused for every call before any work"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf1_copy_ops.py::test_cpu_c3_copy_op_refusal_no_cuda_call[export_rope_rows-pos-negative]",
+   "rule": "E1",
+   "old": "refuse 'export_rope_rows: position past table end'",
+   "new": "moved to the new test ID tests/test_bwdf1_copy_ops.py::test_cpu_e1_empty_export_span_not_refused[export_rope_rows-pos-negative]: accept, result [0, 0, 2], 0 CUDA calls",
+   "why": "the empty export (len 0, empty cache) reads no table row"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf1_copy_ops.py::test_cpu_c3_copy_op_refusal_no_cuda_call[export_rope_rows-past-cos]",
+   "rule": "E1",
+   "old": "refuse 'export_rope_rows: position past table end'",
+   "new": "moved to the new test ID tests/test_bwdf1_copy_ops.py::test_cpu_e1_empty_export_span_not_refused[export_rope_rows-past-cos]: accept, result [0, 1, 2], 0 CUDA calls (Build B refused this one)",
+   "why": "the output [0, 1, 2] has no rows: no table row is read"
+  }
+ ],
+ "notes": [
+  "Build B's E3 rows on the CPU reach the kernel launch ('CUDA error ...') or die (signal 6 / 11: the out-of-range axis writes past keep_shape or ReduceSpec on the host); on a GPU they read past the operand (scripts/bwdf3_step_p2.py e3, staged).",
+  "E2 accepts cos tables with trailing extents of 1, which Build B refused ('tables must be (T, D)'), and still refuses a sin table with a trailing extent other than 1, which Build B accepted on an empty launch (e2c-sin-trailing-2; BWD-F2 refused it too).",
+  "E1 accepts empty launches Build B refused (e1-rope_apply-empty-short-cos, e1-rope_apply-zero-D, copy_ops export_rope_rows-past-cos): the ruling bounds only the read span."
+ ]
+}

@@ -1,0 +1,74 @@
+{
+ "E1": {
+  "row": "e1-rope_apply-empty-short-sin",
+  "inputs": "x=C((0,2,2)); cs=H((2,2)); sn=H((1,2)); tc.rope_apply(x, cs, sn, 0)",
+  "build_F2_path": "rope_tables_check checked the span on every call (e4ad8381a kernels.cu:8708) and refused sin [1, 2] < L 2 although x [0, 2, 2] reads nothing",
+  "build_F2_measured": "rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0)",
+  "build_F3_check_position": "tensor_cuda/src/kernels.cu:8812",
+  "build_F3_measured": "[0, 2, 2]"
+ },
+ "E2": {
+  "row": "e2-rope_apply-sin-T-D-1",
+  "inputs": "x=H((1,2,2)); cs=H((2,2)); sn=H((2,2,1)); tc.rope_apply(x, cs, sn, 0)",
+  "build_F2_path": "rope_tables_check required rank 2 for both tables (e4ad8381a kernels.cu:8706)",
+  "build_F2_measured": "rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 2, 1] float32 on cpu, pos0 0)",
+  "build_F3_check_position": "tensor_cuda/src/kernels.cu:8810",
+  "build_F3_measured": "CUDA error at rope_apply: no CUDA-capable device is detected"
+ },
+ "E3": {
+  "row": "e3-sum-duplicate",
+  "inputs": "a=H((2,)); a.sum([0, 0])",
+  "build_F2_path": "reduce_impl marked axis 0 once but multiplied its extent twice (red_size 4; e4ad8381a kernels.cu:1410-1416), then the tail kernel read 4 elements (kernels.cu:1336)",
+  "build_F2_measured": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+  "build_F3_check_position": "tensor_cuda/src/kernels.cu:1442",
+  "build_F3_measured": "reduce: duplicate value in axis (axes [0, 0], operand [2]); refused before any allocation"
+ },
+ "E3-mean": {
+  "row": "e3-mean-out-of-range",
+  "inputs": "a=H((2,)); a.mean([5])",
+  "build_F2_path": "ops::mean read a.shape()[5] of a rank-1 tensor before sum (e4ad8381a ops.cpp mean)",
+  "build_F2_measured": "process died (-11)",
+  "build_F3_check_position": "tensor_cuda/src/ops.cpp:1062",
+  "build_F3_measured": "mean: axis 5 is out of bounds for array of dimension 1 (axes [5], operand [2]); refused before any allocation"
+ },
+ "E4": {
+  "row": "e4-swap-pair1-byte-bound",
+  "inputs": "r0=C((0,4,2),'uint8'); i0=C((0,1,2),'uint8'); r1=C((0,2305843009213693952,2),'uint8'); i1=C((0,2305843009213693952,2),'uint8'); p0=C((0,4,0)); p1=C((0,4,0)); j0=C((0,1,0)); j1=C((0,1,0)); cs=C((1,0)); sn=C((1,0)); tc.swap_row_pairs_with_rope([r0, r1], [p0, p1], [i0, i1], [j0, j1], cs, sn, 1, 1, 0, 0, 0)",
+  "build_F2_path": "splice_rows_check proved the extent fits int64 (e4ad8381a kernels.cu:8603); pair 0 ran, then pair 1's NDArray constructor refused [0, 2^62, 2] uint8 (kernels.cu:8615)",
+  "build_F2_measured": "NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)",
+  "build_F3_check_position": "tensor_cuda/src/kernels.cu:8682",
+  "build_F3_measured": "splice_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 old_cache [0, 2305843009213693952, 2] uint8 on cuda:0, operand 1 insert [0, 230"
+ },
+ "D1-where": {
+  "row": "d1-where-empty-mixed-dtype",
+  "inputs": "c=C((0,)); x=C((0,)); y=C((0,),'float16'); tc.where(c, x, y)",
+  "build_F2_path": "where_nd checked x/y dtype only when the output had elements (e4ad8381a kernels.cu:1615) and returned [0]",
+  "build_F2_measured": "[0]",
+  "build_F3_check_position": "tensor_cuda/src/kernels.cu:1666",
+  "build_F3_measured": "where: x has dtype float32 but y has float16; the data operands must match (cond [0] float32, x [0] float32, y [0] float16); refused before any allocation"
+ },
+ "D1-rank": {
+  "row": "d1-rank9-binary-empty",
+  "inputs": "a=C((0,)).reshape([1]*8+[0]); b=C((0,)).reshape([1]*8+[0]); a + b",
+  "build_F2_path": "check_meta_rank refused before any work (BWD-F2 R2, unchanged)",
+  "build_F2_measured": "ew_binary: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+  "build_F3_check_position": "tensor_cuda/src/kernels.cu:1244",
+  "build_F3_measured": "ew_binary: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation"
+ },
+ "D1-axpy": {
+  "row": "d1-axpy-empty-destination-shape",
+  "inputs": "p=C((0,1)); o=C((0,2)); tc._C.axpy_(p, o, 1.0)",
+  "build_F2_path": "axpy_ refused the destination shape (BWD-F2 R6, unchanged)",
+  "build_F2_measured": "axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2], which does not map element for element onto param; refused before any launch",
+  "build_F3_check_position": "tensor_cuda/src/kernels.cu:5719",
+  "build_F3_measured": "axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2], which does not map element for element onto param; refused before any launch"
+ },
+ "D1-rope-dtype": {
+  "row": "d1-rope-table-dtype-empty",
+  "inputs": "x=C((0,2,2)); cs=H((2,2),'float16'); sn=H((2,2)); tc.rope_apply(x, cs, sn, 0)",
+  "build_F2_path": "rope_tables_check's dtype term on every call (unchanged)",
+  "build_F2_measured": "rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float16 on cpu, sin [2, 2] float32 on cpu, pos0 0)",
+  "build_F3_check_position": "tensor_cuda/src/kernels.cu:8808",
+  "build_F3_measured": "rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float16 on cpu, sin [2, 2] float32 on cpu, pos0 0)"
+ }
+}

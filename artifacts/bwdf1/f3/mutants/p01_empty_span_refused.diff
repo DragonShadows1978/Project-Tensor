@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -8809,7 +8809,7 @@
+     throw std::runtime_error(o + ": table/" + xname + " dtype mismatch" + ctx);
+   if (!rope_table_layout_ok(cs, D) || !rope_table_layout_ok(sn, D))
+     throw std::runtime_error(o + ": tables must be (T, D)" + ctx);
+-  if (reads && (pos0 < 0 || rows < 0 || pos0 > cs.shape[0] || rows > cs.shape[0] - pos0 || pos0 > sn.shape[0] ||
++  if (/* MUTANT p01_empty_span_refused */ (pos0 < 0 || rows < 0 || pos0 > cs.shape[0] || rows > cs.shape[0] - pos0 || pos0 > sn.shape[0] ||
+                 rows > sn.shape[0] - pos0))
+     throw std::runtime_error(o + ": position past table end" + ctx);
+   if (reads && (!same_device(cs.device, xdevice) || !same_device(sn.device, xdevice)))
