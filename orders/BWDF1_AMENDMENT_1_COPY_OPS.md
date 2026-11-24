@@ -50,6 +50,14 @@ measurement; C3 measures it. `stack`, `splice_rows` and `evict_rows` are the sam
   `tensor_cuda/src/kernels.cu:1513-1535`.
 - **Exercises:** C1's ops through the public API, CPU refusal rows, the staged memcheck line, two more mutants.
 - **Does not cover:** new concatenation semantics (no broadcasting across non-cat dimensions); performance.
+- **Operand census:** C1's ops, each precondition per op, and each C2 term with its refusal rows.
+- **Baseline isolation:** Build B (`fbd335ae7`) is the reference for accepted results (G4) and for every "record
+  Build B" clause in C3. Production is read-only.
+- **Required evidence:** C1's rows in `CENSUS.json`; C2's rows in `BOUNDARY.json`; the G1 refusal rows with call
+  counts; the staged memcheck line with its dry-run exit; `m05` and `m06` in `MUTANTS.json` and
+  `MUTANT_RESULTS.json`.
+- **Forbidden configuration:** a check that runs after an allocation or CUDA call; any change to an accepted
+  result; edits outside the extended writable set.
 
 ## Registration checklist (order-lint)
 
@@ -60,3 +68,22 @@ measurement; C3 measures it. `stack`, `splice_rows` and `evict_rows` are the sam
 - **L90:** Voice's `grad.py:301` call is a consumer site, report-only.
 - **L99:** the lead read `kernels.cu:1513-1535` at `fbd335ae7` and `f7282b1d`, `ops.cpp:1230-1233` and
   `__init__.py:1398-1399`, before sealing this amendment.
+- **L01:** no new instrument; the order's L01 list covers cmake, nvcc, pytest, python3, `compute-sanitizer` (version only)
+  and `forge-gpu-run`.
+- **L16:** the cheapest passing work would check only `cat_nd`'s extents. Excluded by C1's census of every copy op and
+  every precondition, G1's row per C2 term per op, and `m05`/`m06`.
+- **L19:** C2 holds accepted results to Build B bitwise through G4; each compared side is checked nonzero and
+  non-constant first, as the order's L19 says.
+- **L25:** each build in its own process, same seeded inputs, compared afterwards, as the order's L25.
+- **L41:** `m05` and `m06` name their failing G1 rows in `MUTANTS.json` before they run; show each killing test runs
+  the mutated check.
+- **L55:** for one witness per C2 term (rank, a non-copy extent, dtype, device, `dim` range), show the shapes, Build
+  B's output shape and the copy offsets it would use, and Build E's refusal.
+- **L56:** as the order's L56: slips under Deviations; at most 3 repairs per script of yours.
+
+## Done
+
+Your final message adds, verbatim, to the order's Done list:
+- C1's census summary (ops, preconditions, which were checked before);
+- C2's refusal classes, each with its witness;
+- the C3 rows: G1 refusal rows, the staged memcheck line and its dry-run exit, `m05` and `m06` results.
