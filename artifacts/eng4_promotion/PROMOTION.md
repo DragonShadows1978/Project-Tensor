@@ -82,4 +82,7 @@ production per test ID.
 - **The tree** is ENG4's lane tip plus this record. It adds files only to production's tree, apart from the six
   product and test files.
 
-**Approval:** pending.
+**Approval:** the owner approved this merge via Ember on 2026-11-24 (13:54 UTC). The reply was A to the decision
+request `20261123-225906_Project-Tensor_eng4-merge-decision.md`: merge into production main and push. The verbatim
+text is in the local promotion ticket and the lead's register. The engine binary install is not part of this merge and
+remains a separate request.
