@@ -88,15 +88,37 @@ The backward cuBLAS handle retains a private 32 MiB workspace per initialized de
 the process, outside the TensorCUDA allocation pool. Calling `_conv_backward_config(device)` initializes
 the handle and allocates the workspace on first use. Backward bitwise reproducibility is scoped to the
 same call layout (shapes, strides and pointer alignment), cuBLAS version, GPU architecture and SM count.
+TensorCUDA core keeps a second backward cuBLAS handle of its own (its fp32 matmul backward,
+`tensor_cuda/src/ops.cpp`), also with a private 32 MiB workspace per device for the life of the process,
+outside the allocation pool. A process that runs backward through both holds 64 MiB per device.
 
 `instance_norm1d` tracks any active TensorCUDA operand among x, scale and bias. It replays the
 shifted fp32 row statistics for dX and dScale. dScale sums dy times the normalized input, and
 dBias sums dy, in fixed time-then-batch order. Tracked calls allocate a fresh TensorCUDA result,
 require TensorCUDA operands and refuse `out=`.
 
+`upsample_nearest1d`, `reflection_pad1d` and `instance_norm1d` select the tracked path when grad mode is enabled
+and any TensorCUDA operand requires grad. The tracked path returns a fresh TensorCUDA tensor and bypasses
+`set_allocator`. It requires TensorCUDA from BWD-R1 (accepted at `d4285023`) or a build that provides
+`tensor_cuda.attach_vjp`. With an older core it raises `RuntimeError` before running the forward.
+Tracked calls refuse `out=` with `ValueError` and foreign tensor operands, including DLPack producers and capsules,
+with `TypeError`. Frozen TensorCUDA affine tensors and `None` are both supported. With grad mode disabled or all
+operands frozen, calls use the ordinary DLPack and allocator path, except for the destination rule below.
+
 Under grad mode, `layer_norm`, `group_norm`, `lstm` and `rint` raise `no backward yet` for active
 TensorCUDA inputs and `out cannot require grad` for a TensorCUDA destination that requires gradients.
-The destination rule covers each of LSTM's three outputs.
+The destination rule covers each of LSTM's three outputs. The ops with a tracked path (`conv1d`,
+`conv_transpose1d`, `instance_norm1d`, `upsample_nearest1d`, `reflection_pad1d`) apply the same rule when
+all their inputs are frozen: under grad mode, an `out=` TensorCUDA destination that requires gradients
+raises `RuntimeError` (`out cannot require grad`) before any work.
+
+The tracked VJPs allocate their gradients with `tensor_cuda.empty` on the operand's device, which must be
+the current CUDA device when backward runs. On a host with more than one GPU, make the operands' device
+current before calling backward; otherwise backward raises partway through the graph.
+
+Backward runs on one process-wide host dispatch lane. While one backward runs (its Python VJPs included),
+a backward started on another thread raises `RuntimeError` (`backward: only one host dispatch lane is
+supported`) at once instead of waiting, for every graph.
 
 The convolution semantics are ONNX `Conv` and `ConvTranspose`, 1-D. The other ops follow their ONNX operators; their
 docstrings give the details.
@@ -408,15 +430,10 @@ operand of the low-level `_tc_signal.*_run` calls) raises `TypeError` before any
 
 ## Gradients
 
-`upsample_nearest1d`, `reflection_pad1d` and `instance_norm1d` select the tracked path when grad mode is enabled
-and any TensorCUDA operand requires grad. The tracked path returns a fresh TensorCUDA tensor and bypasses
-`set_allocator`. It requires TensorCUDA from BWD-R1 (accepted at `d4285023`) or a build that provides
-`tensor_cuda.attach_vjp`. With an older core it raises `RuntimeError` before running the forward.
-
-Tracked calls refuse `out=` with `ValueError` and foreign tensor operands, including DLPack producers and capsules,
-with `TypeError`. `instance_norm1d` differentiates `x` and raises `ValueError` for trainable scale or bias. Frozen
-TensorCUDA affine tensors and `None` are both supported. With grad mode disabled or all operands frozen, calls use
-the ordinary DLPack and allocator path.
+The gradient rules for every op are in one place: the "Gradients" subsection under "API" above (tracked paths,
+refusals, the destination rule, the operand device, the dispatch lane and the backward workspaces).
+`instance_norm1d` differentiates `x`, a trainable `scale` and a trainable `bias` (dScale and dBias as described
+there); it does not raise for a trainable scale or bias.
 
 ## Errors
 

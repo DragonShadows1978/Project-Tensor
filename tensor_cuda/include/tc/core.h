@@ -197,6 +197,14 @@ std::tuple<NDArray, NDArray> topk_nd(const NDArray& a, int k, bool largest);
 NDArray transpose2d_last(const NDArray& a);            // swap last two dims
 NDArray permute(const NDArray& a, const std::vector<int>& dims);
 NDArray broadcast_to(const NDArray& a, const Shape& shape);
+// BWD-F1 Z2: NumPy's broadcast of two shapes (equal extents, or one of them 1, gives the other; 0 against 1 gives
+// 0); refuses anything else with a runtime_error naming both shapes, on the host, before any CUDA call.
+Shape broadcast_shapes(const Shape& a, const Shape& b);
+// BWD-F1 Amendment 1 C2: the multi-operand copy ops' host check (cat_nd: all_extents false, every extent but `dim`
+// equal; stack: all_extents true, every shape equal and dim in [-(ndim+1), ndim]). Same rank, dtype and device as
+// operand 0; a non-float dtype refused when a launch would follow. Returns the normalized dim (cat) or -1 (stack).
+// Throws runtime_error naming the op, the operand index and the shapes, before any allocation or CUDA call.
+int check_copy_operands(const char* op, const std::vector<NDArray>& arrs, int dim, bool all_extents);
 
 // Concatenate along `dim`; slice [start, start+len) along `dim` (cat backward).
 NDArray cat_nd(const std::vector<NDArray>& arrs, int dim);

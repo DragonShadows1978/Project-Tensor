@@ -1,0 +1,63 @@
+{
+ "cases": [
+  {
+   "id": "attach_vjp_value",
+   "op": "attach_vjp_value",
+   "dtype": "float32",
+   "shapes": [],
+   "want": "attach_vjp: value must be a TensorCUDA Tensor, got list"
+  },
+  {
+   "id": "matmul_backward_host_k0",
+   "op": "matmul_backward_host",
+   "dtype": "float32",
+   "shapes": [
+    [
+     2,
+     0
+    ],
+    [
+     0,
+     3
+    ]
+   ],
+   "want": "matmul backward: expected same-device CUDA fp32 matrices (left operand [2, 3] float32 on cpu, right operand [0, 3] float32 on cpu)"
+  },
+  {
+   "id": "matmul_backward_host_n0",
+   "op": "matmul_backward_host",
+   "dtype": "float32",
+   "shapes": [
+    [
+     2,
+     3
+    ],
+    [
+     3,
+     0
+    ]
+   ],
+   "want": "matmul backward: expected same-device CUDA fp32 matrices (left operand [2, 0] float32 on cpu, right operand [3, 0] float32 on cpu)"
+  }
+ ],
+ "results": {
+  "attach_vjp_value": {
+   "raised": "RuntimeError",
+   "message": "Unable to cast Python instance of type <class 'list'> to C++ type '?' (#define PYBIND11_DETAILED_ERROR_MESSAGES or compile in debug mode for details)",
+   "calls": 0
+  },
+  "matmul_backward_host_k0": {
+   "raised": "RuntimeError",
+   "message": "matmul backward: expected same-device CUDA fp32 matrices",
+   "calls": 0
+  },
+  "matmul_backward_host_n0": {
+   "raised": "RuntimeError",
+   "message": "matmul backward: expected same-device CUDA fp32 matrices",
+   "calls": 0
+  }
+ },
+ "case_calls": 0,
+ "control_calls": 4,
+ "control": "cudaMalloc failed: no CUDA-capable device is detected"
+}

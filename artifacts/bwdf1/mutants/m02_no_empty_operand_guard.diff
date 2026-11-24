@@ -1,0 +1,10 @@
+--- E/tensor_cuda/src/kernels.cu
++++ m02_no_empty_operand_guard/tensor_cuda/src/kernels.cu
+@@ -1084,6 +1084,7 @@
+ // practice; unverified -- lead to check: "empty operand non-empty output broadcast check").
+ void require_readable_operands(const char* op, const Shape& out, std::initializer_list<const char*> names,
+                                std::initializer_list<const Shape*> shapes) {
++  return;  // MUTANT m02_no_empty_operand_guard
+   const auto empty = [](const Shape& s) {
+     for (int64_t e : s)
+       if (e == 0) return true;

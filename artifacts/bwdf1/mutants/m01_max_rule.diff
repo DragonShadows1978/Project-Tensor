@@ -1,0 +1,13 @@
+--- E/tensor_cuda/src/kernels.cu
++++ m01_max_rule/tensor_cuda/src/kernels.cu
+@@ -1053,9 +1053,7 @@
+   for (int i = 0; i < n; ++i) {
+     int64_t ad = (i < n - na) ? 1 : a[i - (n - na)];
+     int64_t bd = (i < n - nb) ? 1 : b[i - (n - nb)];
+-    if (ad == bd) out[i] = ad;
+-    else if (ad == 1) out[i] = bd;
+-    else if (bd == 1) out[i] = ad;
++    if (!(ad != bd && ad != 1 && bd != 1)) out[i] = ad > bd ? ad : bd;  // MUTANT m01_max_rule
+     else
+       throw std::runtime_error("shapes not broadcastable: " + bcast_shape_text(a) + " and " + bcast_shape_text(b) +
+                                " (extents " + std::to_string(ad) + " and " + std::to_string(bd) + " at output axis " +

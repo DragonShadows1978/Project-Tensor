@@ -1,0 +1,425 @@
+{
+ "z2": {
+  "B": {
+   "functions_cut": [
+    "Shape contiguous_strides(const Shape& shape) {",
+    "Shape broadcast_shape(const Shape& a, const Shape& b) {",
+    "void bcast_strides(const Shape& in, const Shape& out, int64_t* dst) {"
+   ],
+   "witnesses": [
+    {
+     "class": "0 against 1",
+     "a": "[4, 0]",
+     "b": "[4, 1]",
+     "out": "[4, 1]",
+     "out_numel": 4,
+     "a_strides": "[0, 1]",
+     "b_strides": "[1, 1]",
+     "out_strides": "[1, 1]",
+     "a_offsets_first_last": [
+      0,
+      0
+     ],
+     "b_offsets_first_last": [
+      0,
+      3
+     ],
+     "launch": true
+    },
+    {
+     "class": "0 against an extent above 1",
+     "a": "[4, 0]",
+     "b": "[4, 3]",
+     "refused": "shapes not broadcastable"
+    },
+    {
+     "class": "equal extents",
+     "a": "[4, 3]",
+     "b": "[4, 3]",
+     "out": "[4, 3]",
+     "out_numel": 12,
+     "a_strides": "[3, 1]",
+     "b_strides": "[3, 1]",
+     "out_strides": "[3, 1]",
+     "a_offsets_first_last": [
+      0,
+      11
+     ],
+     "b_offsets_first_last": [
+      0,
+      11
+     ],
+     "launch": true
+    },
+    {
+     "class": "1 against an extent above 1",
+     "a": "[4, 1]",
+     "b": "[4, 3]",
+     "out": "[4, 3]",
+     "out_numel": 12,
+     "a_strides": "[1, 0]",
+     "b_strides": "[3, 1]",
+     "out_strides": "[3, 1]",
+     "a_offsets_first_last": [
+      0,
+      3
+     ],
+     "b_offsets_first_last": [
+      0,
+      11
+     ],
+     "launch": true
+    }
+   ]
+  },
+  "E": {
+   "functions_cut": [
+    "Shape contiguous_strides(const Shape& shape) {",
+    "std::string bcast_shape_text(const Shape& s) {",
+    "Shape broadcast_shape(const Shape& a, const Shape& b) {",
+    "void bcast_strides(const Shape& in, const Shape& out, int64_t* dst) {"
+   ],
+   "witnesses": [
+    {
+     "class": "0 against 1",
+     "a": "[4, 0]",
+     "b": "[4, 1]",
+     "out": "[4, 0]",
+     "out_numel": 0,
+     "a_strides": "[0, 1]",
+     "b_strides": "[1, 0]",
+     "out_strides": "[0, 1]",
+     "a_offsets_first_last": [
+      0,
+      0
+     ],
+     "b_offsets_first_last": [
+      0,
+      0
+     ],
+     "launch": false
+    },
+    {
+     "class": "0 against an extent above 1",
+     "a": "[4, 0]",
+     "b": "[4, 3]",
+     "refused": "shapes not broadcastable: [4, 0] and [4, 3] (extents 0 and 3 at output axis 1)"
+    },
+    {
+     "class": "equal extents",
+     "a": "[4, 3]",
+     "b": "[4, 3]",
+     "out": "[4, 3]",
+     "out_numel": 12,
+     "a_strides": "[3, 1]",
+     "b_strides": "[3, 1]",
+     "out_strides": "[3, 1]",
+     "a_offsets_first_last": [
+      0,
+      11
+     ],
+     "b_offsets_first_last": [
+      0,
+      11
+     ],
+     "launch": true
+    },
+    {
+     "class": "1 against an extent above 1",
+     "a": "[4, 1]",
+     "b": "[4, 3]",
+     "out": "[4, 3]",
+     "out_numel": 12,
+     "a_strides": "[1, 0]",
+     "b_strides": "[3, 1]",
+     "out_strides": "[3, 1]",
+     "a_offsets_first_last": [
+      0,
+      3
+     ],
+     "b_offsets_first_last": [
+      0,
+      11
+     ],
+     "launch": true
+    }
+   ]
+  }
+ },
+ "c2": [
+  {
+   "term": "non-cat extent (Voice: zero first)",
+   "witness_shapes": [
+    [
+     1,
+     512,
+     0
+    ],
+    [
+     1,
+     1,
+     1
+    ]
+   ],
+   "dim": 1,
+   "b_output_shape": [
+    1,
+    513,
+    0
+   ],
+   "b_output_elements": 0,
+   "copies": [
+    {
+     "operand": 0,
+     "shape": [
+      1,
+      512,
+      0
+     ],
+     "offset_along_dim": 0,
+     "elements": 0,
+     "largest_output_element_written": null,
+     "past_output_end": null
+    },
+    {
+     "operand": 1,
+     "shape": [
+      1,
+      1,
+      1
+     ],
+     "offset_along_dim": 512,
+     "elements": 1,
+     "largest_output_element_written": 0,
+     "past_output_end": true
+    }
+   ],
+   "e_refusal": "cat: operand 1 has extent 1 at dim 2 but operand 0 has 0; extents must match outside dim 1 (operand 1 [1, 1, 1] float32 on cpu, operand 0 [1, 512, 0] float32 on cpu)",
+   "e_cuda_calls": 0
+  },
+  {
+   "term": "non-cat extent (Voice: later one frame longer)",
+   "witness_shapes": [
+    [
+     1,
+     3,
+     5
+    ],
+    [
+     1,
+     2,
+     6
+    ],
+    [
+     1,
+     4,
+     6
+    ]
+   ],
+   "dim": 1,
+   "b_output_shape": [
+    1,
+    9,
+    5
+   ],
+   "b_output_elements": 45,
+   "copies": [
+    {
+     "operand": 0,
+     "shape": [
+      1,
+      3,
+      5
+     ],
+     "offset_along_dim": 0,
+     "elements": 15,
+     "largest_output_element_written": 14,
+     "past_output_end": false
+    },
+    {
+     "operand": 1,
+     "shape": [
+      1,
+      2,
+      6
+     ],
+     "offset_along_dim": 3,
+     "elements": 12,
+     "largest_output_element_written": 25,
+     "past_output_end": false
+    },
+    {
+     "operand": 2,
+     "shape": [
+      1,
+      4,
+      6
+     ],
+     "offset_along_dim": 5,
+     "elements": 24,
+     "largest_output_element_written": 45,
+     "past_output_end": true
+    }
+   ],
+   "e_refusal": "cat: operand 1 has extent 6 at dim 2 but operand 0 has 5; extents must match outside dim 1 (operand 1 [1, 2, 6] float32 on cpu, operand 0 [1, 3, 5] float32 on cpu)",
+   "e_cuda_calls": 0
+  },
+  {
+   "term": "rank",
+   "witness_shapes": [
+    [
+     2,
+     3
+    ],
+    [
+     2,
+     3,
+     1
+    ]
+   ],
+   "dim": 0,
+   "b_output_shape": [
+    4,
+    3
+   ],
+   "b_output_elements": 12,
+   "copies": [
+    {
+     "operand": 0,
+     "shape": [
+      2,
+      3
+     ],
+     "offset_along_dim": 0,
+     "elements": 6,
+     "largest_output_element_written": 5,
+     "past_output_end": false
+    },
+    {
+     "operand": 1,
+     "shape": [
+      2,
+      3,
+      1
+     ],
+     "offset_along_dim": 2,
+     "elements": 6,
+     "largest_output_element_written": 11,
+     "past_output_end": false
+    }
+   ],
+   "b_note": "B builds operand 1's copy spec with nd = 2 from operand 0: its third extent is ignored",
+   "e_refusal": "cat: operand 1 has rank 3 but operand 0 has rank 2 (operand 1 [2, 3, 1] float32 on cpu, operand 0 [2, 3] float32 on cpu)",
+   "e_cuda_calls": 0
+  },
+  {
+   "term": "dtype",
+   "witness_shapes": [
+    [
+     2,
+     3
+    ],
+    [
+     2,
+     3
+    ]
+   ],
+   "dim": 0,
+   "b_output_shape": [
+    4,
+    3
+   ],
+   "b_output_elements": 12,
+   "copies": [
+    {
+     "operand": 0,
+     "shape": [
+      2,
+      3
+     ],
+     "offset_along_dim": 0,
+     "elements": 6,
+     "largest_output_element_written": 5,
+     "past_output_end": false
+    },
+    {
+     "operand": 1,
+     "shape": [
+      2,
+      3
+     ],
+     "offset_along_dim": 2,
+     "elements": 6,
+     "largest_output_element_written": 11,
+     "past_output_end": false
+    }
+   ],
+   "b_note": "B dispatches on operand 0's dtype (float32) and reads the float16 operand as 4-byte elements: twice its bytes, a read past its end",
+   "e_refusal": "cat: operand 1 has dtype float16 but operand 0 has float32 (operand 1 [2, 3] float16 on cpu, operand 0 [2, 3] float32 on cpu)",
+   "e_cuda_calls": 0
+  },
+  {
+   "term": "device",
+   "witness_shapes": [
+    [
+     0,
+     3
+    ],
+    [
+     0,
+     3
+    ]
+   ],
+   "dim": 0,
+   "b_output_shape": [
+    0,
+    3
+   ],
+   "b_output_elements": 0,
+   "copies": [
+    {
+     "operand": 0,
+     "shape": [
+      0,
+      3
+     ],
+     "offset_along_dim": 0,
+     "elements": 0,
+     "largest_output_element_written": null,
+     "past_output_end": null
+    },
+    {
+     "operand": 1,
+     "shape": [
+      0,
+      3
+     ],
+     "offset_along_dim": 0,
+     "elements": 0,
+     "largest_output_element_written": null,
+     "past_output_end": null
+    }
+   ],
+   "b_note": "B allocates on operand 0's device and launches the copy with the other operand's pointer whatever its device (here both are empty, so no copy runs; with elements the kernel reads a host or foreign pointer)",
+   "e_refusal": "cat: operand 1 is on cuda:0 but operand 0 is on cpu (operand 1 [0, 3] float32 on cuda:0, operand 0 [0, 3] float32 on cpu)",
+   "e_cuda_calls": 0
+  },
+  {
+   "term": "dim range",
+   "witness_shapes": [
+    [
+     2,
+     3
+    ],
+    [
+     2,
+     3
+    ]
+   ],
+   "dim": 2,
+   "b": "os[2] on a rank-2 shape vector: out-of-range std::vector access on the host (undefined)",
+   "e_refusal": "cat: dim 2 out of range [-2, 1] for operand 0 of shape [2, 3]",
+   "e_cuda_calls": 0
+  }
+ ]
+}

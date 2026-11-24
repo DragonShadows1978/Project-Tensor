@@ -1,0 +1,1023 @@
+{
+ "rows": [
+  [
+   "cat-empty-list",
+   "cat",
+   "",
+   "tc.cat([], 0)",
+   [
+    "cat: empty input"
+   ]
+  ],
+  [
+   "cat-rank0",
+   "cat",
+   "a=H((1,)).reshape([]); b=H((1,)).reshape([])",
+   "tc.cat([a, b], 0)",
+   [
+    "cat:",
+    "operand 0 has shape []"
+   ]
+  ],
+  [
+   "cat-dim-high",
+   "cat",
+   "a=H((2,3)); b=H((2,3))",
+   "tc.cat([a, b], 2)",
+   [
+    "cat: dim 2 out of range",
+    "[2, 3]"
+   ]
+  ],
+  [
+   "cat-dim-low",
+   "cat",
+   "a=H((2,3)); b=H((2,3))",
+   "tc.cat([a, b], -3)",
+   [
+    "cat: dim -3 out of range",
+    "[2, 3]"
+   ]
+  ],
+  [
+   "cat-rank",
+   "cat",
+   "a=H((2,3)); b=H((2,3,1))",
+   "tc.cat([a, b], 0)",
+   [
+    "cat: operand 1 has rank 3",
+    "[2, 3, 1]",
+    "[2, 3]"
+   ]
+  ],
+  [
+   "cat-extent-voice-zero-first",
+   "cat",
+   "a=H((1,512,0)); b=H((1,1,1))",
+   "tc.cat([a, b], 1)",
+   [
+    "cat: operand 1 has extent 1 at dim 2",
+    "[1, 1, 1]",
+    "[1, 512, 0]"
+   ]
+  ],
+  [
+   "cat-extent-voice-longer-later",
+   "cat",
+   "a=H((1,3,5)); b=H((1,2,6)); c=H((1,4,6))",
+   "tc.cat([a, b, c], 1)",
+   [
+    "cat: operand 1 has extent 6 at dim 2",
+    "[1, 2, 6]",
+    "[1, 3, 5]"
+   ]
+  ],
+  [
+   "cat-extent-shorter-later",
+   "cat",
+   "a=H((4,3)); b=H((2,2))",
+   "tc.cat([a, b], 0)",
+   [
+    "cat: operand 1 has extent 2 at dim 1",
+    "[2, 2]",
+    "[4, 3]"
+   ]
+  ],
+  [
+   "cat-dtype",
+   "cat",
+   "a=H((2,3)); b=H((2,3),'float16')",
+   "tc.cat([a, b], 0)",
+   [
+    "cat: operand 1 has dtype float16",
+    "[2, 3]"
+   ]
+  ],
+  [
+   "cat-device",
+   "cat",
+   "a=H((0,3)); b=C((0,3))",
+   "tc.cat([a, b], 0)",
+   [
+    "cat: operand 1 is on cuda:0 but operand 0 is on cpu",
+    "[0, 3]"
+   ]
+  ],
+  [
+   "cat-dtype-class",
+   "cat",
+   "a=H((2,3),'uint8'); b=H((2,3),'uint8')",
+   "tc.cat([a, b], 0)",
+   [
+    "cat: op supports float32/float16/bfloat16 only",
+    "[2, 3]"
+   ]
+  ],
+  [
+   "stack-empty-list",
+   "stack",
+   "",
+   "tc.stack([], 0)",
+   [
+    "stack: empty input"
+   ]
+  ],
+  [
+   "stack-dim-high",
+   "stack",
+   "a=H((2,3)); b=H((2,3))",
+   "tc.stack([a, b], 3)",
+   [
+    "stack: dim 3 out of range",
+    "[2, 3]"
+   ]
+  ],
+  [
+   "stack-dim-low",
+   "stack",
+   "a=H((2,3)); b=H((2,3))",
+   "tc.stack([a, b], -4)",
+   [
+    "stack: dim -4 out of range",
+    "[2, 3]"
+   ]
+  ],
+  [
+   "stack-rank",
+   "stack",
+   "a=H((2,3)); b=H((2,3,1))",
+   "tc.stack([a, b], 0)",
+   [
+    "stack: operand 1 has rank 3",
+    "[2, 3, 1]"
+   ]
+  ],
+  [
+   "stack-shape",
+   "stack",
+   "a=H((2,3)); b=H((2,4))",
+   "tc.stack([a, b], 1)",
+   [
+    "stack: operand 1 has extent 4 at dim 1",
+    "every shape must be equal",
+    "[2, 4]",
+    "[2, 3]"
+   ]
+  ],
+  [
+   "stack-dtype",
+   "stack",
+   "a=H((2,3)); b=H((2,3),'bfloat16')",
+   "tc.stack([a, b], 0)",
+   [
+    "stack: operand 1 has dtype bfloat16",
+    "[2, 3]"
+   ]
+  ],
+  [
+   "stack-device",
+   "stack",
+   "a=C((0,3)); b=H((0,3))",
+   "tc.stack([a, b], 0)",
+   [
+    "stack: operand 1 is on cpu but operand 0 is on cuda:0",
+    "[0, 3]"
+   ]
+  ],
+  [
+   "slice-dim-high",
+   "slice",
+   "a=H((4,3))",
+   "a.slice(2, 0, 1)",
+   [
+    "slice: dim 2 out of range",
+    "[4, 3]"
+   ]
+  ],
+  [
+   "slice-dim-low",
+   "slice",
+   "a=H((4,3))",
+   "a.slice(-3, 0, 1)",
+   [
+    "slice: dim -3 out of range",
+    "[4, 3]"
+   ]
+  ],
+  [
+   "slice-start-negative",
+   "slice",
+   "a=H((4,3))",
+   "a.slice(1, -1, 1)",
+   [
+    "slice: start -1 and length 1",
+    "[4, 3]"
+   ]
+  ],
+  [
+   "slice-length-negative",
+   "slice",
+   "a=H((4,3))",
+   "a.slice(0, 1, -1)",
+   [
+    "slice: start 1 and length -1",
+    "[4, 3]"
+   ]
+  ],
+  [
+   "slice-past-end",
+   "slice",
+   "a=H((4,3))",
+   "a.slice(0, 3, 2)",
+   [
+    "slice: start 3 and length 2",
+    "extent 4",
+    "[4, 3]"
+   ]
+  ],
+  [
+   "slice-start-past-extent",
+   "slice",
+   "a=H((4,3))",
+   "a.slice(0, 5, 0)",
+   [
+    "slice: start 5 and length 0",
+    "[4, 3]"
+   ]
+  ],
+  [
+   "write_rows-dtype",
+   "write_rows",
+   "b=C((0,4,2)); s=C((0,1,2),'float16')",
+   "tc.write_rows(b, s, 0)",
+   [
+    "write_rows: dtype mismatch",
+    "[0, 4, 2]",
+    "[0, 1, 2]"
+   ]
+  ],
+  [
+   "write_rows-rank",
+   "write_rows",
+   "b=C((0,)); s=C((0,2))",
+   "tc.write_rows(b, s, 0)",
+   [
+    "write_rows: need >=2D buf and src",
+    "buf [0] ",
+    "[0, 2]"
+   ]
+  ],
+  [
+   "write_rows-device",
+   "write_rows",
+   "b=C((0,4,2)); s=H((0,1,2))",
+   "tc.write_rows(b, s, 0)",
+   [
+    "write_rows: device mismatch",
+    "[0, 4, 2]",
+    "[0, 1, 2]"
+   ]
+  ],
+  [
+   "write_rows-last-dim",
+   "write_rows",
+   "b=C((0,4,2)); s=C((0,1,3))",
+   "tc.write_rows(b, s, 0)",
+   [
+    "write_rows: last-dim mismatch",
+    "[0, 1, 3]"
+   ]
+  ],
+  [
+   "write_rows-leading",
+   "write_rows",
+   "b=C((0,4,2)); s=C((2,0,2))",
+   "tc.write_rows(b, s, 0)",
+   [
+    "write_rows: leading-dim mismatch",
+    "[0, 4, 2]",
+    "[2, 0, 2]"
+   ]
+  ],
+  [
+   "write_rows-capacity",
+   "write_rows",
+   "b=C((0,2,2)); s=C((0,3,2))",
+   "tc.write_rows(b, s, 0)",
+   [
+    "write_rows: src rows exceed capacity",
+    "[0, 3, 2]"
+   ]
+  ],
+  [
+   "write_rows-start-negative",
+   "write_rows",
+   "b=C((0,4,2)); s=C((0,1,2))",
+   "tc.write_rows(b, s, -1)",
+   [
+    "write_rows: start -1 is negative",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "write_rows-host-with-elements",
+   "write_rows",
+   "b=H((1,4,2)); s=H((1,1,2))",
+   "tc.write_rows(b, s, 0)",
+   [
+    "write_rows: CUDA tensors required",
+    "[1, 4, 2]"
+   ]
+  ],
+  [
+   "write_rows-zero-capacity",
+   "write_rows",
+   "b=H((0,2)); s=H((1,2))",
+   "tc.write_rows(b, s, 0)",
+   [
+    "write_rows: src rows exceed capacity",
+    "[0, 2]",
+    "[1, 2]"
+   ]
+  ],
+  [
+   "export_rows-host",
+   "export_rows",
+   "c=H((1,4,2))",
+   "tc.export_rows(c, 1, 0, 1)",
+   [
+    "export_rows: CUDA tensor required",
+    "[1, 4, 2]"
+   ]
+  ],
+  [
+   "export_rows-dim",
+   "export_rows",
+   "c=C((0,4,2))",
+   "tc.export_rows(c, 3, 0, 1)",
+   [
+    "export_rows: dim out of range"
+   ]
+  ],
+  [
+   "export_rows-start-negative",
+   "export_rows",
+   "c=C((0,4,2))",
+   "tc.export_rows(c, 1, -1, 1)",
+   [
+    "export_rows: invalid span",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "export_rows-length-negative",
+   "export_rows",
+   "c=C((0,4,2))",
+   "tc.export_rows(c, 1, 0, -1)",
+   [
+    "export_rows: invalid span",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "export_rows-past-end",
+   "export_rows",
+   "c=C((0,4,2))",
+   "tc.export_rows(c, 1, 3, 2)",
+   [
+    "export_rows: invalid span",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "splice_rows-dtype",
+   "splice_rows",
+   "o=C((0,4,2)); i=C((0,1,2),'float16')",
+   "tc.splice_rows(o, i, 1, 0, 1)",
+   [
+    "splice_rows: dtype mismatch",
+    "[0, 4, 2]",
+    "[0, 1, 2]"
+   ]
+  ],
+  [
+   "splice_rows-device",
+   "splice_rows",
+   "o=C((0,4,2)); i=H((0,1,2))",
+   "tc.splice_rows(o, i, 1, 0, 1)",
+   [
+    "splice_rows: device mismatch",
+    "[0, 4, 2]",
+    "[0, 1, 2]"
+   ]
+  ],
+  [
+   "splice_rows-host",
+   "splice_rows",
+   "o=H((1,4,2)); i=H((1,1,2))",
+   "tc.splice_rows(o, i, 1, 0, 1)",
+   [
+    "splice_rows: CUDA tensors required",
+    "[1, 4, 2]",
+    "[1, 1, 2]"
+   ]
+  ],
+  [
+   "splice_rows-rank",
+   "splice_rows",
+   "o=C((0,4,2)); i=C((0,1))",
+   "tc.splice_rows(o, i, 1, 0, 1)",
+   [
+    "splice_rows: rank mismatch",
+    "[0, 4, 2]",
+    "[0, 1]"
+   ]
+  ],
+  [
+   "splice_rows-extent",
+   "splice_rows",
+   "o=C((0,4,2)); i=C((0,1,3))",
+   "tc.splice_rows(o, i, 1, 0, 1)",
+   [
+    "splice_rows: shape mismatch outside splice dim",
+    "[0, 4, 2]",
+    "[0, 1, 3]"
+   ]
+  ],
+  [
+   "splice_rows-dim",
+   "splice_rows",
+   "o=C((0,4,2)); i=C((0,1,2))",
+   "tc.splice_rows(o, i, 3, 0, 1)",
+   [
+    "splice_rows: dim out of range"
+   ]
+  ],
+  [
+   "splice_rows-head-negative",
+   "splice_rows",
+   "o=C((0,4,2)); i=C((0,1,2))",
+   "tc.splice_rows(o, i, 1, -1, 1)",
+   [
+    "splice_rows: invalid head/tail",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "splice_rows-tail-before-head",
+   "splice_rows",
+   "o=C((0,4,2)); i=C((0,1,2))",
+   "tc.splice_rows(o, i, 1, 2, 1)",
+   [
+    "splice_rows: invalid head/tail",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "splice_rows-tail-past-end",
+   "splice_rows",
+   "o=C((0,4,2)); i=C((0,1,2))",
+   "tc.splice_rows(o, i, 1, 0, 5)",
+   [
+    "splice_rows: invalid head/tail",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "evict_rows-host",
+   "evict_rows",
+   "o=H((1,4,2))",
+   "tc.evict_rows(o, 1, 0, 1)",
+   [
+    "evict_rows: CUDA tensor required",
+    "[1, 4, 2]"
+   ]
+  ],
+  [
+   "evict_rows-dim",
+   "evict_rows",
+   "o=C((0,4,2))",
+   "tc.evict_rows(o, -4, 0, 1)",
+   [
+    "evict_rows: dim out of range"
+   ]
+  ],
+  [
+   "evict_rows-head-negative",
+   "evict_rows",
+   "o=C((0,4,2))",
+   "tc.evict_rows(o, 1, -1, 1)",
+   [
+    "evict_rows: drop exceeds live tail",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "evict_rows-drop-negative",
+   "evict_rows",
+   "o=C((0,4,2))",
+   "tc.evict_rows(o, 1, 0, -1)",
+   [
+    "evict_rows: drop exceeds live tail",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "evict_rows-head-past-end",
+   "evict_rows",
+   "o=C((0,4,2))",
+   "tc.evict_rows(o, 1, 5, 0)",
+   [
+    "evict_rows: drop exceeds live tail",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "evict_rows-drop-past-tail",
+   "evict_rows",
+   "o=C((0,4,2))",
+   "tc.evict_rows(o, 1, 3, 2)",
+   [
+    "evict_rows: drop exceeds live tail",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "export_rope_rows-host",
+   "export_rope_rows",
+   "c=H((1,4,2)); cs=H((8,2)); sn=H((8,2))",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)",
+   [
+    "export_rope_rows: CUDA tensor required",
+    "[1, 4, 2]"
+   ]
+  ],
+  [
+   "export_rope_rows-seq-dim",
+   "export_rope_rows",
+   "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+   "tc.export_rope_rows(c, cs, sn, 0, 0, 1, 0)",
+   [
+    "export_rope_rows: seq dim must be -2",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "export_rope_rows-odd-D",
+   "export_rope_rows",
+   "c=C((0,4,3)); cs=C((0,3)); sn=C((0,3))",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)",
+   [
+    "export_rope_rows: odd head_dim",
+    "[0, 4, 3]"
+   ]
+  ],
+  [
+   "export_rope_rows-span",
+   "export_rope_rows",
+   "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+   "tc.export_rope_rows(c, cs, sn, 1, 3, 2, 0)",
+   [
+    "export_rope_rows: invalid span",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "export_rope_rows-table-dtype",
+   "export_rope_rows",
+   "c=C((0,4,2)); cs=C((0,2),'float16'); sn=C((0,2))",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)",
+   [
+    "export_rope_rows: table/cache dtype mismatch",
+    "[0, 2]"
+   ]
+  ],
+  [
+   "export_rope_rows-cos-shape",
+   "export_rope_rows",
+   "c=C((0,4,2)); cs=C((0,3)); sn=C((0,2))",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)",
+   [
+    "export_rope_rows: tables must be (T, D)",
+    "[0, 3]"
+   ]
+  ],
+  [
+   "export_rope_rows-sin-rank",
+   "export_rope_rows",
+   "c=C((0,4,2)); cs=C((0,2)); sn=C((0,))",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)",
+   [
+    "export_rope_rows: tables must be (T, D)",
+    "[0]"
+   ]
+  ],
+  [
+   "export_rope_rows-table-device",
+   "export_rope_rows",
+   "c=C((0,4,2)); cs=H((0,2)); sn=C((0,2))",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 0, 0)",
+   [
+    "export_rope_rows: tables must be on the cache's device",
+    "[0, 2] float32 on cpu"
+   ]
+  ],
+  [
+   "export_rope_rows-pos-negative",
+   "export_rope_rows",
+   "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 0, -1)",
+   [
+    "export_rope_rows: position past table end",
+    "pos0 -1"
+   ]
+  ],
+  [
+   "export_rope_rows-past-cos",
+   "export_rope_rows",
+   "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+   "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)",
+   [
+    "export_rope_rows: position past table end",
+    "[0, 2]"
+   ]
+  ],
+  [
+   "export_row_pairs-pair1",
+   "export_row_pairs",
+   "r0=C((0,4,2)); p0=C((0,4,2)); r1=C((0,4,2)); p1=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+   "tc.export_row_pairs([r0, r1], [p0, p1], cs, sn, 1, 1, [0, 5], [0, 0], 0, 0)",
+   [
+    "export_rows: invalid span",
+    "[0, 4, 2]"
+   ]
+  ],
+  [
+   "swap_row_pairs-pair1-extent",
+   "swap_row_pairs_with_rope",
+   "r0=C((0,4,2)); p0=C((1,4,0)); r1=C((0,4,2)); p1=C((1,4,0)); i0=C((0,1,2)); j0=C((1,1,0)); i1=C((0,1,3)); j1=C((1,1,0)); cs=C((1,0)); sn=C((1,0))",
+   "tc.swap_row_pairs_with_rope([r0, r1], [p0, p1], [i0, i1], [j0, j1], cs, sn, 1, 1, 0, 1, 0)",
+   [
+    "splice_rows: shape mismatch outside splice dim",
+    "[0, 1, 3]"
+   ]
+  ],
+  [
+   "evict_row_pairs-pair1",
+   "evict_row_pairs",
+   "r0=C((0,4,2)); p0=C((0,4,2)); r1=C((0,4,2)); p1=C((0,2,2))",
+   "tc.evict_row_pairs([r0, r1], [p0, p1], 1, 1, 1, 2)",
+   [
+    "evict_rows: drop exceeds live tail",
+    "[0, 2, 2]"
+   ]
+  ],
+  [
+   "arena_row_pair_transaction-pair1",
+   "arena_row_pair_transaction",
+   "r0=C((0,4,2)); p0=C((1,4,0)); r1=C((0,4,2)); p1=C((1,4,0)); i0=C((0,1,2)); j0=C((1,1,0)); i1=C((0,1,2)); j1=C((1,1,0),'float16'); cs=C((1,0)); sn=C((1,0))",
+   "tc.arena_row_pair_transaction([r0, r1], [p0, p1], [i0, i1], [j0, j1], cs, sn, 1, 1, 0, 1, 4)",
+   [
+    "rope_apply: table/x dtype mismatch"
+   ]
+  ]
+ ],
+ "results": {
+  "cat-empty-list": {
+   "raised": "RuntimeError",
+   "message": "cat: empty input",
+   "calls": 0
+  },
+  "cat-rank0": {
+   "raised": "RuntimeError",
+   "message": "cat: operand 0 has shape [] (rank 0); operands need rank >= 1",
+   "calls": 0
+  },
+  "cat-dim-high": {
+   "raised": "RuntimeError",
+   "message": "cat: dim 2 out of range [-2, 1] for operand 0 of shape [2, 3]",
+   "calls": 0
+  },
+  "cat-dim-low": {
+   "raised": "RuntimeError",
+   "message": "cat: dim -3 out of range [-2, 1] for operand 0 of shape [2, 3]",
+   "calls": 0
+  },
+  "cat-rank": {
+   "raised": "RuntimeError",
+   "message": "cat: operand 1 has rank 3 but operand 0 has rank 2 (operand 1 [2, 3, 1] float32 on cpu, operand 0 [2, 3] float32 on cpu)",
+   "calls": 0
+  },
+  "cat-extent-voice-zero-first": {
+   "raised": "RuntimeError",
+   "message": "cat: operand 1 has extent 1 at dim 2 but operand 0 has 0; extents must match outside dim 1 (operand 1 [1, 1, 1] float32 on cpu, operand 0 [1, 512, 0] float32 on cpu)",
+   "calls": 0
+  },
+  "cat-extent-voice-longer-later": {
+   "raised": "RuntimeError",
+   "message": "cat: operand 1 has extent 6 at dim 2 but operand 0 has 5; extents must match outside dim 1 (operand 1 [1, 2, 6] float32 on cpu, operand 0 [1, 3, 5] float32 on cpu)",
+   "calls": 0
+  },
+  "cat-extent-shorter-later": {
+   "raised": "RuntimeError",
+   "message": "cat: operand 1 has extent 2 at dim 1 but operand 0 has 3; extents must match outside dim 0 (operand 1 [2, 2] float32 on cpu, operand 0 [4, 3] float32 on cpu)",
+   "calls": 0
+  },
+  "cat-dtype": {
+   "raised": "RuntimeError",
+   "message": "cat: operand 1 has dtype float16 but operand 0 has float32 (operand 1 [2, 3] float16 on cpu, operand 0 [2, 3] float32 on cpu)",
+   "calls": 0
+  },
+  "cat-device": {
+   "raised": "RuntimeError",
+   "message": "cat: operand 1 is on cuda:0 but operand 0 is on cpu (operand 1 [0, 3] float32 on cuda:0, operand 0 [0, 3] float32 on cpu)",
+   "calls": 0
+  },
+  "cat-dtype-class": {
+   "raised": "RuntimeError",
+   "message": "cat: op supports float32/float16/bfloat16 only (operand 0 [2, 3] uint8 on cpu)",
+   "calls": 0
+  },
+  "stack-empty-list": {
+   "raised": "RuntimeError",
+   "message": "stack: empty input",
+   "calls": 0
+  },
+  "stack-dim-high": {
+   "raised": "RuntimeError",
+   "message": "stack: dim 3 out of range [-3, 2] for operand 0 of shape [2, 3]",
+   "calls": 0
+  },
+  "stack-dim-low": {
+   "raised": "RuntimeError",
+   "message": "stack: dim -4 out of range [-3, 2] for operand 0 of shape [2, 3]",
+   "calls": 0
+  },
+  "stack-rank": {
+   "raised": "RuntimeError",
+   "message": "stack: operand 1 has rank 3 but operand 0 has rank 2 (operand 1 [2, 3, 1] float32 on cpu, operand 0 [2, 3] float32 on cpu)",
+   "calls": 0
+  },
+  "stack-shape": {
+   "raised": "RuntimeError",
+   "message": "stack: operand 1 has extent 4 at dim 1 but operand 0 has 3; every shape must be equal (operand 1 [2, 4] float32 on cpu, operand 0 [2, 3] float32 on cpu)",
+   "calls": 0
+  },
+  "stack-dtype": {
+   "raised": "RuntimeError",
+   "message": "stack: operand 1 has dtype bfloat16 but operand 0 has float32 (operand 1 [2, 3] bfloat16 on cpu, operand 0 [2, 3] float32 on cpu)",
+   "calls": 0
+  },
+  "stack-device": {
+   "raised": "RuntimeError",
+   "message": "stack: operand 1 is on cpu but operand 0 is on cuda:0 (operand 1 [0, 3] float32 on cpu, operand 0 [0, 3] float32 on cuda:0)",
+   "calls": 0
+  },
+  "slice-dim-high": {
+   "raised": "RuntimeError",
+   "message": "slice: dim 2 out of range for operand 0 of shape [4, 3]",
+   "calls": 0
+  },
+  "slice-dim-low": {
+   "raised": "RuntimeError",
+   "message": "slice: dim -3 out of range for operand 0 of shape [4, 3]",
+   "calls": 0
+  },
+  "slice-start-negative": {
+   "raised": "RuntimeError",
+   "message": "slice: start -1 and length 1 out of range for extent 3 at dim 1 of operand 0 of shape [4, 3]",
+   "calls": 0
+  },
+  "slice-length-negative": {
+   "raised": "RuntimeError",
+   "message": "slice: start 1 and length -1 out of range for extent 4 at dim 0 of operand 0 of shape [4, 3]",
+   "calls": 0
+  },
+  "slice-past-end": {
+   "raised": "RuntimeError",
+   "message": "slice: start 3 and length 2 out of range for extent 4 at dim 0 of operand 0 of shape [4, 3]",
+   "calls": 0
+  },
+  "slice-start-past-extent": {
+   "raised": "RuntimeError",
+   "message": "slice: start 5 and length 0 out of range for extent 4 at dim 0 of operand 0 of shape [4, 3]",
+   "calls": 0
+  },
+  "write_rows-dtype": {
+   "raised": "RuntimeError",
+   "message": "write_rows: dtype mismatch (operand 0 buf [0, 4, 2] float32 on cuda:0, operand 1 src [0, 1, 2] float16 on cuda:0)",
+   "calls": 0
+  },
+  "write_rows-rank": {
+   "raised": "RuntimeError",
+   "message": "write_rows: need >=2D buf and src (operand 0 buf [0] float32 on cuda:0, operand 1 src [0, 2] float32 on cuda:0)",
+   "calls": 0
+  },
+  "write_rows-device": {
+   "raised": "RuntimeError",
+   "message": "write_rows: device mismatch (operand 0 buf [0, 4, 2] float32 on cuda:0, operand 1 src [0, 1, 2] float32 on cpu)",
+   "calls": 0
+  },
+  "write_rows-last-dim": {
+   "raised": "RuntimeError",
+   "message": "write_rows: last-dim mismatch (operand 0 buf [0, 4, 2] float32 on cuda:0, operand 1 src [0, 1, 3] float32 on cuda:0)",
+   "calls": 0
+  },
+  "write_rows-leading": {
+   "raised": "RuntimeError",
+   "message": "write_rows: leading-dim mismatch (operand 0 buf [0, 4, 2] float32 on cuda:0, operand 1 src [2, 0, 2] float32 on cuda:0)",
+   "calls": 0
+  },
+  "write_rows-capacity": {
+   "raised": "RuntimeError",
+   "message": "write_rows: src rows exceed capacity (operand 0 buf [0, 2, 2] float32 on cuda:0, operand 1 src [0, 3, 2] float32 on cuda:0)",
+   "calls": 0
+  },
+  "write_rows-start-negative": {
+   "raised": "RuntimeError",
+   "message": "write_rows: start -1 is negative (operand 0 buf [0, 4, 2] float32 on cuda:0, operand 1 src [0, 1, 2] float32 on cuda:0)",
+   "calls": 0
+  },
+  "write_rows-host-with-elements": {
+   "raised": "RuntimeError",
+   "message": "write_rows: CUDA tensors required (operand 0 buf [1, 4, 2] float32 on cpu, operand 1 src [1, 1, 2] float32 on cpu)",
+   "calls": 0
+  },
+  "write_rows-zero-capacity": {
+   "raised": "RuntimeError",
+   "message": "write_rows: src rows exceed capacity (operand 0 buf [0, 2] float32 on cpu, operand 1 src [1, 2] float32 on cpu)",
+   "calls": 0
+  },
+  "export_rows-host": {
+   "raised": "RuntimeError",
+   "message": "export_rows: CUDA tensor required (operand 0 cache [1, 4, 2] float32 on cpu, dim 1, start 0, length 1)",
+   "calls": 0
+  },
+  "export_rows-dim": {
+   "raised": "RuntimeError",
+   "message": "export_rows: dim out of range",
+   "calls": 0
+  },
+  "export_rows-start-negative": {
+   "raised": "RuntimeError",
+   "message": "export_rows: invalid span (operand 0 cache [0, 4, 2] float32 on cuda:0, dim 1, start -1, length 1)",
+   "calls": 0
+  },
+  "export_rows-length-negative": {
+   "raised": "RuntimeError",
+   "message": "export_rows: invalid span (operand 0 cache [0, 4, 2] float32 on cuda:0, dim 1, start 0, length -1)",
+   "calls": 0
+  },
+  "export_rows-past-end": {
+   "raised": "RuntimeError",
+   "message": "export_rows: invalid span (operand 0 cache [0, 4, 2] float32 on cuda:0, dim 1, start 3, length 2)",
+   "calls": 0
+  },
+  "splice_rows-dtype": {
+   "raised": "RuntimeError",
+   "message": "splice_rows: dtype mismatch (operand 0 old_cache [0, 4, 2] float32 on cuda:0, operand 1 insert [0, 1, 2] float16 on cuda:0, dim 1, head 0, tail_start 1)",
+   "calls": 0
+  },
+  "splice_rows-device": {
+   "raised": "RuntimeError",
+   "message": "splice_rows: device mismatch (operand 0 old_cache [0, 4, 2] float32 on cuda:0, operand 1 insert [0, 1, 2] float32 on cpu, dim 1, head 0, tail_start 1)",
+   "calls": 0
+  },
+  "splice_rows-host": {
+   "raised": "RuntimeError",
+   "message": "splice_rows: CUDA tensors required (operand 0 old_cache [1, 4, 2] float32 on cpu, operand 1 insert [1, 1, 2] float32 on cpu, dim 1, head 0, tail_start 1)",
+   "calls": 0
+  },
+  "splice_rows-rank": {
+   "raised": "RuntimeError",
+   "message": "splice_rows: rank mismatch (operand 0 old_cache [0, 4, 2] float32 on cuda:0, operand 1 insert [0, 1] float32 on cuda:0, dim 1, head 0, tail_start 1)",
+   "calls": 0
+  },
+  "splice_rows-extent": {
+   "raised": "RuntimeError",
+   "message": "splice_rows: shape mismatch outside splice dim (operand 0 old_cache [0, 4, 2] float32 on cuda:0, operand 1 insert [0, 1, 3] float32 on cuda:0, dim 1, head 0, tail_start 1)",
+   "calls": 0
+  },
+  "splice_rows-dim": {
+   "raised": "RuntimeError",
+   "message": "splice_rows: dim out of range",
+   "calls": 0
+  },
+  "splice_rows-head-negative": {
+   "raised": "RuntimeError",
+   "message": "splice_rows: invalid head/tail (operand 0 old_cache [0, 4, 2] float32 on cuda:0, operand 1 insert [0, 1, 2] float32 on cuda:0, dim 1, head -1, tail_start 1)",
+   "calls": 0
+  },
+  "splice_rows-tail-before-head": {
+   "raised": "RuntimeError",
+   "message": "splice_rows: invalid head/tail (operand 0 old_cache [0, 4, 2] float32 on cuda:0, operand 1 insert [0, 1, 2] float32 on cuda:0, dim 1, head 2, tail_start 1)",
+   "calls": 0
+  },
+  "splice_rows-tail-past-end": {
+   "raised": "RuntimeError",
+   "message": "splice_rows: invalid head/tail (operand 0 old_cache [0, 4, 2] float32 on cuda:0, operand 1 insert [0, 1, 2] float32 on cuda:0, dim 1, head 0, tail_start 5)",
+   "calls": 0
+  },
+  "evict_rows-host": {
+   "raised": "RuntimeError",
+   "message": "evict_rows: CUDA tensor required (operand 0 old_cache [1, 4, 2] float32 on cpu, dim 1, head 0, drop 1)",
+   "calls": 0
+  },
+  "evict_rows-dim": {
+   "raised": "RuntimeError",
+   "message": "evict_rows: dim out of range",
+   "calls": 0
+  },
+  "evict_rows-head-negative": {
+   "raised": "RuntimeError",
+   "message": "evict_rows: drop exceeds live tail (operand 0 old_cache [0, 4, 2] float32 on cuda:0, dim 1, head -1, drop 1)",
+   "calls": 0
+  },
+  "evict_rows-drop-negative": {
+   "raised": "RuntimeError",
+   "message": "evict_rows: drop exceeds live tail (operand 0 old_cache [0, 4, 2] float32 on cuda:0, dim 1, head 0, drop -1)",
+   "calls": 0
+  },
+  "evict_rows-head-past-end": {
+   "raised": "RuntimeError",
+   "message": "evict_rows: drop exceeds live tail (operand 0 old_cache [0, 4, 2] float32 on cuda:0, dim 1, head 5, drop 0)",
+   "calls": 0
+  },
+  "evict_rows-drop-past-tail": {
+   "raised": "RuntimeError",
+   "message": "evict_rows: drop exceeds live tail (operand 0 old_cache [0, 4, 2] float32 on cuda:0, dim 1, head 3, drop 2)",
+   "calls": 0
+  },
+  "export_rope_rows-host": {
+   "raised": "RuntimeError",
+   "message": "export_rope_rows: CUDA tensor required (operand 0 cache [1, 4, 2] float32 on cpu, operand 1 cos [8, 2] float32 on cpu, operand 2 sin [8, 2] float32 on cpu, dim 1, start 0, length 1, pos0 0)",
+   "calls": 0
+  },
+  "export_rope_rows-seq-dim": {
+   "raised": "RuntimeError",
+   "message": "export_rope_rows: seq dim must be -2 (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [0, 2] float32 on cuda:0, operand 2 sin [0, 2] float32 on cuda:0, dim 0, start 0, length 1, pos0 0)",
+   "calls": 0
+  },
+  "export_rope_rows-odd-D": {
+   "raised": "RuntimeError",
+   "message": "export_rope_rows: odd head_dim (operand 0 cache [0, 4, 3] float32 on cuda:0, operand 1 cos [0, 3] float32 on cuda:0, operand 2 sin [0, 3] float32 on cuda:0, dim 1, start 0, length 1, pos0 0)",
+   "calls": 0
+  },
+  "export_rope_rows-span": {
+   "raised": "RuntimeError",
+   "message": "export_rope_rows: invalid span (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [0, 2] float32 on cuda:0, operand 2 sin [0, 2] float32 on cuda:0, dim 1, start 3, length 2, pos0 0)",
+   "calls": 0
+  },
+  "export_rope_rows-table-dtype": {
+   "raised": "RuntimeError",
+   "message": "export_rope_rows: table/cache dtype mismatch (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [0, 2] float16 on cuda:0, operand 2 sin [0, 2] float32 on cuda:0, dim 1, start 0, length 0, pos0 0)",
+   "calls": 0
+  },
+  "export_rope_rows-cos-shape": {
+   "raised": "RuntimeError",
+   "message": "export_rope_rows: tables must be (T, D) (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [0, 3] float32 on cuda:0, operand 2 sin [0, 2] float32 on cuda:0, dim 1, start 0, length 0, pos0 0)",
+   "calls": 0
+  },
+  "export_rope_rows-sin-rank": {
+   "raised": "RuntimeError",
+   "message": "export_rope_rows: tables must be (T, D) (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [0, 2] float32 on cuda:0, operand 2 sin [0] float32 on cuda:0, dim 1, start 0, length 0, pos0 0)",
+   "calls": 0
+  },
+  "export_rope_rows-table-device": {
+   "raised": "RuntimeError",
+   "message": "export_rope_rows: tables must be on the cache's device (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [0, 2] float32 on cpu, operand 2 sin [0, 2] float32 on cuda:0, dim 1, start 0, length 0, pos0 0)",
+   "calls": 0
+  },
+  "export_rope_rows-pos-negative": {
+   "raised": "RuntimeError",
+   "message": "export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [0, 2] float32 on cuda:0, operand 2 sin [0, 2] float32 on cuda:0, dim 1, start 0, length 0, pos0 -1)",
+   "calls": 0
+  },
+  "export_rope_rows-past-cos": {
+   "raised": "RuntimeError",
+   "message": "export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [0, 2] float32 on cuda:0, operand 2 sin [0, 2] float32 on cuda:0, dim 1, start 0, length 1, pos0 0)",
+   "calls": 0
+  },
+  "export_row_pairs-pair1": {
+   "raised": "RuntimeError",
+   "message": "export_rows: invalid span (operand 0 cache [0, 4, 2] float32 on cuda:0, dim 1, start 5, length 0)",
+   "calls": 0
+  },
+  "swap_row_pairs-pair1-extent": {
+   "raised": "RuntimeError",
+   "message": "splice_rows: shape mismatch outside splice dim (operand 0 old_cache [0, 4, 2] float32 on cuda:0, operand 1 insert [0, 1, 3] float32 on cuda:0, dim 1, head 0, tail_start 1)",
+   "calls": 0
+  },
+  "evict_row_pairs-pair1": {
+   "raised": "RuntimeError",
+   "message": "evict_rows: drop exceeds live tail (operand 0 old_cache [0, 2, 2] float32 on cuda:0, dim 1, head 1, drop 2)",
+   "calls": 0
+  },
+  "arena_row_pair_transaction-pair1": {
+   "raised": "RuntimeError",
+   "message": "rope_apply: table/x dtype mismatch",
+   "calls": 0
+  }
+ },
+ "control_calls": 4
+}

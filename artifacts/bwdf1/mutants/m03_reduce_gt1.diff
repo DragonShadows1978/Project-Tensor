@@ -1,0 +1,11 @@
+--- E/tensor_cuda/src/kernels.cu
++++ m03_reduce_gt1/tensor_cuda/src/kernels.cu
+@@ -1443,7 +1443,7 @@
+     // at 0 and reads no element). Axes with extents above 1 are summed exactly as before, so results for gradients
+     // with no zero extent are bitwise unchanged. Prior art: PyTorch's Tensor.sum_to_size / at::sum_to (the gradient of
+     // a broadcast operand is the sum over its broadcast axes), NumPy's empty sum (0); taken as is.
+-    if (tsz == 1 && a.shape[d] != 1) axes.push_back(d);
++    if (tsz == 1 && a.shape[d] > 1) axes.push_back(d);  // MUTANT m03_reduce_gt1
+   }
+   NDArray summed = axes.empty() ? a.clone() : reduce_sum(a, axes, /*keepdim=*/true);
+   return summed.reshape(target);

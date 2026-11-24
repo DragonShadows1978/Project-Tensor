@@ -338,15 +338,21 @@ using ConvAttrs = std::array<int64_t, 6>;
 
 ConvBackwardGeom backward_geom(bool transposed, const std::vector<int64_t>& x, const std::vector<int64_t>& w,
                                const std::vector<int64_t>& dy, const ConvAttrs& attrs) {
-  for (const auto* shape : {&x, &w, &dy}) {
+  // BWD-F1 H3 (audit BWDA-F08): each message names the operand and its shape (the upstream message also the expected
+  // shape); the old text stays as the prefix and the exception type (ValueError) is unchanged. Messages only.
+  const std::pair<const char*, const std::vector<int64_t>*> named[] = {{"x", &x}, {"w", &w}, {"dy", &dy}};
+  for (const auto& [role, shape] : named) {
     if (shape->size() != 3 || std::any_of(shape->begin(), shape->end(), [](int64_t d) { return d <= 0; }))
-      bad_attr("convolution backward: expected positive rank-3 shapes");
+      bad_attr(std::string("convolution backward: expected positive rank-3 shapes: ") + role + " has shape " +
+               shape_str(*shape));
     ck_fp32_bytes(ck_shape_numel(*shape, "convolution backward shape"), "convolution backward bytes");
   }
   const auto [s, pb, pe, op, d, groups] = attrs;
   const auto expected = transposed ? plan_conv_transpose1d(x, w, nullptr, s, pb, pe, op, d, groups).out_shape
                                    : plan_conv1d(x, w, nullptr, s, pb, pe, d, groups).out_shape;
-  if (dy != expected) bad_attr("convolution backward: unexpected upstream shape");
+  if (dy != expected)
+    bad_attr("convolution backward: unexpected upstream shape: dy has shape " + shape_str(dy) + ", expected " +
+             shape_str(expected) + " for x " + shape_str(x) + " and w " + shape_str(w));
   return {x[0], x[1], dy[1], x[2], dy[2], w[2], s, pb, op, d, groups, transposed};
 }
 

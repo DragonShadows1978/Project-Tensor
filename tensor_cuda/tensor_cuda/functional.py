@@ -224,6 +224,24 @@ def einsum(equation, *operands):
             if ch not in all_idx:
                 all_idx.append(ch)
 
+    # BWD-F1 Z2: einsum multiplies the aligned operands with `*`, whose broadcast follows NumPy's rule (kernels.cu
+    # broadcast_shape). Check that rule per index first, so a refusal (an index with extents 0 and 3, or 2 and 3) comes
+    # before the permutes below launch anything, naming both operands' shapes. Only well-formed terms are checked
+    # (one extent per letter, as the code below reads them); the message keeps the multiply's prefix. Results are
+    # unchanged. Prior art: NumPy's broadcasting rule and numpy.einsum's per-label extent check; ours: the placement.
+    seen = {}
+    for pos, (t, s) in enumerate(zip(operands, terms)):
+        if len(s) != len(t.shape):
+            continue
+        for ch in s:
+            e = int(t.shape[s.index(ch)])
+            if ch not in seen or seen[ch][0] == 1:
+                seen[ch] = (e, pos, list(t.shape))
+            elif e != 1 and e != seen[ch][0]:
+                e0, p0, s0 = seen[ch]
+                raise RuntimeError(f"shapes not broadcastable: einsum index '{ch}' has extent {e0} in operand {p0} "
+                                   f"(shape {s0}) and {e} in operand {pos} (shape {list(t.shape)})")
+
     factors = []
     for t, s in zip(operands, terms):
         order = [ch for ch in all_idx if ch in s]

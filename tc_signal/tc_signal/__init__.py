@@ -78,6 +78,15 @@ def _recording(name, out, *inputs):
     # stays independent and the tracked path owns its destination.
     tc = _grad_context(inputs)
     if tc is None:
+        # BWD-F1 H1 (audit BWDA-F06): frozen inputs take the untracked path, which used to write an `out=` that
+        # requires grad without recording anything. Refuse that destination exactly as the four refused ops do
+        # (_refuse_no_backward above: RuntimeError "out cannot require grad", under grad mode only), before any work.
+        # Prior art: PyTorch refuses an out= tensor that requires grad under grad mode ("functions with out=...
+        # arguments don't support automatic differentiation"); unverified -- lead to check. Ours: the reuse of the
+        # refused ops' rule.
+        destinations = out if isinstance(out, (tuple, list)) else (out,)
+        if _grad_context(destinations) is not None:
+            raise RuntimeError(f"tc_signal: {name}: out cannot require grad")
         return None
     if out is not None:
         raise ValueError(f"tc_signal: {name}: out= is unsupported when recording gradients")
