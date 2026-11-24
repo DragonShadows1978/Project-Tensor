@@ -1,0 +1,96 @@
+{
+ "order": "orders/ENG5ST_REGRESSION_TEST.md",
+ "new_file": "tensor_cuda/tests/test_eng5s_status_checks.py",
+ "new_file_sha256": "65ca40c5c8759739ed4ad53a9bc345daab509a5cffb44c440ae35f34b9e39ed3",
+ "sources_read_only": {
+  "scripts/eng5s_gpu_step.py": "0c9b95e93760aaf13f12819905d216c6fcf34e00d5146535126872bfdd4bcc40",
+  "scripts/eng5s_gpu_verdict.py": "51a6684f5a9b52c56b4198a755e92136c72ff2ff77f157ad22e1240f5f5f7726",
+  "tensor_cuda/tests/test_eng5s_status.py": "aece0c007d39320c7021fa3b0317e0af666d1ec968062964e316c6e68c198bd4",
+  "tensor_cuda/tests/support/eng5s_cuda_shim.c": "9df7a36db0fa3ff077468ffa23979c953b187fac4d8fc976ab0e528f6b3d76c2"
+ },
+ "copied": [
+  {
+   "what": "S1_FORM regular expression",
+   "from": "tensor_cuda/tests/test_eng5s_status.py S1_FORM",
+   "to": "tensor_cuda/tests/test_eng5s_status_checks.py S1_FORM",
+   "how": "verbatim (copied, not imported)"
+  },
+  {
+   "what": "the row child body (helpers informative/check/attempt, the cases synchronize, oom_drain, oom_drain_pooled, zeros, from_host, to_host, clone, to_d2h, to_h2d, axpy_, axpy_empty)",
+   "from": "scripts/eng5s_gpu_step.py G2_CHILD",
+   "to": "tensor_cuda/tests/test_eng5s_status_checks.py ROW_CHILD",
+   "how": "line for line, except the items under left_out_of_child and new_child_lines"
+  },
+  {
+   "what": "the entry-and-call prefix per row",
+   "from": "scripts/eng5s_gpu_verdict.py PREFIX",
+   "to": "tensor_cuda/tests/test_eng5s_status_checks.py EXPECT",
+   "how": "the PREFIX string without its trailing error name (the test checks the error name apart)"
+  },
+  {
+   "what": "the row list",
+   "from": "scripts/eng5s_gpu_step.py G2_CASES and CONTROL_ONLY",
+   "to": "tensor_cuda/tests/test_eng5s_status_checks.py GPU_ROWS, GPU_CONTROL_ONLY",
+   "how": "G2_CASES without packed_prefill_dump (site 9 needs a hooks build), plus the control-only row"
+  },
+  {
+   "what": "the OOM-drain arming pattern (eng5_inject_next of the allocation and cudaStreamSynchronize)",
+   "from": "tensor_cuda/tests/test_eng5s_status.py OOM_CHILD (and G2_CHILD's oom cases)",
+   "to": "tensor_cuda/tests/test_eng5s_status_checks.py ROW_CHILD cpu_oom_drain*",
+   "how": "same calls, one injected child per row; the CPU rows have no success control (no device)"
+  },
+  {
+   "what": "the CPU-lane predicate and the compiler lookup",
+   "from": "tensor_cuda/tests/test_eng4_matmul.py CPU_LANE; tensor_cuda/tests/test_eng3_host.py (cc, gcc, clang)",
+   "to": "tensor_cuda/tests/test_eng5s_status_checks.py CPU_LANE, _compiler",
+   "how": "same expression"
+  }
+ ],
+ "new_child_lines": [
+  "INVALID = 1   # cudaErrorInvalidValue",
+  "rec = {\"case\": case, \"tc_file\": os.path.abspath(tc.__file__), \"module_file\": os.path.abspath(C.__file__)}",
+  "if case == \"cpu_synchronize_injected\":",
+  "elif case == \"cpu_synchronize_no_device\":",
+  "rec[\"injected\"] = attempt(lambda: (tc.synchronize(), None)[1], [])",
+  "elif case in (\"cpu_oom_drain\", \"cpu_oom_drain_pooled\"):",
+  "alloc = \"cudaMalloc\" if case == \"cpu_oom_drain\" else \"cudaMallocAsync\"",
+  "if case == \"cpu_oom_drain_pooled\":",
+  "rec[\"injected\"] = attempt(lambda: C.tensor(arr, \"cuda\", False), [(alloc, OOM), (\"cudaStreamSynchronize\", INVALID)])",
+  "elif case == \"synchronize\":",
+  "print(\"ROW \" + json.dumps(rec), flush=True)"
+ ],
+ "left_out_of_child": [
+  "import subprocess",
+  "if subprocess.run([\"forge-gpu-lease-check\", \"--require-held\"]).returncode != 0: raise SystemExit(\"not inside a held forge-gpu-run lease\")",
+  "INVALID = 1   # cudaErrorInvalidValue (the code ENG5-F1/F2's lines injected)",
+  "rec = {\"case\": case}",
+  "if case == \"synchronize\":",
+  "elif case == \"packed_prefill_dump\":",
+  "os.environ[\"TC_APA_SP\"] = \"1\"",
+  "q = tc.tensor(rng.standard_normal((1, 4, 4, 64)).astype(np.float32))",
+  "k = tc.tensor(rng.standard_normal((1, 1, 16, 64)).astype(np.float32))",
+  "v = tc.tensor(rng.standard_normal((1, 1, 16, 64)).astype(np.float32))",
+  "pk = tc.PackedSpKeys(k)",
+  "def pf():",
+  "out, mask, bulk = tc._spo2.packed_prefill(q, k, v, pk._packed_tuple(), 0.125, 6.3, True, None, False,",
+  "fmt=\"tq4\", dump=True)",
+  "o, b = out.numpy(), bulk.numpy()",
+  "return {\"out_finite\": bool(np.isfinite(o).all()), \"out_informative\": informative(o),",
+  "\"bulk_nan\": int(np.isnan(b).sum()), \"bulk_finite\": int(np.isfinite(b).sum()), \"bulk_size\": int(b.size),",
+  "\"bulk_sha256\": hashlib.sha256(np.ascontiguousarray(b).tobytes()).hexdigest()}",
+  "rec[\"control\"] = attempt(pf, [])",
+  "rec[\"injected\"] = attempt(pf, [(\"cudaMemset\", INVALID)])",
+  "tc.synchronize(); rec[\"synchronize_after\"] = \"ok\"",
+  "rec[\"synchronize_after\"] = str(ex)[:200]",
+  "print(\"G2ROW \" + json.dumps(rec), flush=True)"
+ ],
+ "checks": {
+  "S1_FORM identical pattern text": true,
+  "EXPECT equals PREFIX minus the error name, site 9 left out": true,
+  "GPU_ROWS + GPU_CONTROL_ONLY == G2_CASES minus packed_prefill_dump + CONTROL_ONLY": true,
+  "the lease-check line is among the child lines left out": true,
+  "the site-9 case body is among the child lines left out": true
+ },
+ "all_checks_pass": true,
+ "note": "the shim itself (tests/support/eng5s_cuda_shim.c) is used as it is: it is the ENG5-S file, unchanged."
+}
