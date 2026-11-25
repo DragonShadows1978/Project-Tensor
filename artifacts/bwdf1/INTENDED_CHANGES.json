@@ -1,0 +1,37 @@
+{
+  "order": "BWD-F1 Z4 / L12 / L38",
+  "written": "2026-11-24T00:58Z, before any after-run (no Build E exists yet; no suite has run)",
+  "existing_test_changes": [
+    {
+      "test_id": "tc_signal/tests/test_bwd_r3_paths.py::test_host_real_planner_and_no_grad[conv1d]",
+      "change_of": "H1 (audit BWDA-F06)",
+      "listed": "AFTER the Build E CPU after-run, by lead ruling (a), 2026-11-23 (it extends Z4/L38 for this one test)",
+      "old_assertion": "test_bwd_r3_paths.py:60-61: with pytest.raises(BufferError, match=\"CUDA\"): fn(*operands(), out=args[0])",
+      "new_assertion": "with pytest.raises(RuntimeError, match=f\"tc_signal: {op}: out cannot require grad\"): fn(*operands(), out=args[0])  (the other two calls of the test unchanged)",
+      "expected_outcome": "Build B: failed (it raises BufferError from the planner); Build E: passed"
+    },
+    {
+      "test_id": "tc_signal/tests/test_bwd_r3_paths.py::test_host_real_planner_and_no_grad[conv_transpose1d]",
+      "change_of": "H1 (audit BWDA-F06)",
+      "listed": "AFTER the Build E CPU after-run, by lead ruling (a), 2026-11-23 (it extends Z4/L38 for this one test)",
+      "old_assertion": "test_bwd_r3_paths.py:60-61: with pytest.raises(BufferError, match=\"CUDA\"): fn(*operands(), out=args[0])",
+      "new_assertion": "with pytest.raises(RuntimeError, match=f\"tc_signal: {op}: out cannot require grad\"): fn(*operands(), out=args[0])  (the other two calls of the test unchanged)",
+      "expected_outcome": "Build B: failed (it raises BufferError from the planner); Build E: passed"
+    }
+  ],
+  "search": "grep of tensor_cuda/tests, tests/, tc_signal/tests and the top-level test_*.py for \"not broadcastable\", \"element count mismatch\", reduce_to and broadcast; each hit read (CENSUS.json role_counts.test). No existing test asserts an old output shape or an old refusal for a zero-extent broadcast, so no existing test changes.",
+  "expected_outcome_changes": "none. The Z2 refusal message keeps the old text \"shapes not broadcastable\" as its prefix, and the H3 messages keep their old texts as prefixes, so substring matches on the old texts still hold. Any per-ID outcome difference between Build B and Build E in G4 is therefore unintended and reported as a regression.",
+  "addendum_after_the_after_run": {
+    "written": "2026-11-24 ~02:10Z, AFTER the Build E CPU after-run (artifacts/bwdf1/g4/cpu_E). This is NOT a pre-registration and does not make the difference intended; G4's CPU half is reported FAIL on these IDs.",
+    "ids": [
+      "tc_signal/tests/test_bwd_r3_paths.py::test_host_real_planner_and_no_grad[conv1d]",
+      "tc_signal/tests/test_bwd_r3_paths.py::test_host_real_planner_and_no_grad[conv_transpose1d]"
+    ],
+    "old_assertion": "tc_signal/tests/test_bwd_r3_paths.py:60-61: under grad mode, frozen operands with out= a TensorCUDA tensor that requires grad (operands(0)[0]) raise BufferError matching 'CUDA' (the untracked path reached the planner and wrote out)",
+    "new_behaviour": "H1 (the order's ruling, audit F06) refuses that destination first: RuntimeError 'tc_signal: <op>: out cannot require grad'",
+    "cause": "the seat's Z4 test search covered zero-extent broadcasts only; H1's consequence for existing tests was not searched before the after-run (a registration miss by the seat)",
+    "test_not_changed": "Z4/L38 allow existing-test changes only for zero-extent broadcast assertions, so the test is left as it is",
+    "for_the_lead": "a ruling: either (a) allow this one change to test_bwd_r3_paths.py:60-61 (assert H1's RuntimeError) as an intended change of H1, or (b) narrow H1. The seat recommends (a): H1 is the order's ruling and the old assertion pins exactly the F06 defect.",
+    "lead_ruling": "2026-11-23: option (a). H1's destination refusal is intended and precedes the planner's BufferError for frozen inputs with an out= that requires grad, as on the tracked path. The two IDs are listed above as intended changes, after the after-run, by this ruling; the assertion at :60-61 is changed accordingly."
+  }
+}

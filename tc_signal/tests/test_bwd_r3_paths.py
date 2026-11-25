@@ -57,7 +57,9 @@ def test_host_real_planner_and_no_grad(op):
         fn(*args)
     with tc.no_grad(), pytest.raises(BufferError, match="CUDA"):
         fn(*args, out=args[0])
-    with pytest.raises(BufferError, match="CUDA"):
+    # BWD-F1 H1 (lead ruling (a), 2026-11-23): frozen inputs with an out= that requires grad are refused before the
+    # planner, as on the tracked path.
+    with pytest.raises(RuntimeError, match=f"tc_signal: {op}: out cannot require grad"):
         fn(*operands(), out=args[0])
 
 

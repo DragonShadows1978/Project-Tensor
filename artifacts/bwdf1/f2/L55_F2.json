@@ -1,0 +1,69 @@
+{
+ "order": "BWD-F2 L55: one witness per ruling R1-R8 (inputs, Build E's path, Build F2's check position). Build E lines are fbe04d8f9's; Build F2 lines are this tree's. CPU results: artifacts/bwdf1/f2/K1_RESULTS.json; Build B: BOUNDARY_F2.json.",
+ "witnesses": [
+  {
+   "ruling": "R1",
+   "finding": "F03",
+   "row": "f03-cat-named-case",
+   "inputs": "cat([float32 [2, 3], float16 [0, 3]], 0) (CPU: host operands; GPU: k2_vals r9/f03 rows on CUDA)",
+   "build_E_path": "tensor_cuda/src/kernels.cu:1639 (fbe04d8f9) checks a.dtype != a0.dtype for every operand -> RuntimeError 'operand 1 has dtype float16' before the allocation, although operand 1's bytes are never read",
+   "build_F2_check": "tensor_cuda/src/kernels.cu:1728 checks dtype only when a.numel() > 0; the call proceeds to the allocation and copies operand 0 only (Build B's float32 [2, 3]); K1: reaches 'CUDA error at cat' on the CPU"
+  },
+  {
+   "ruling": "R2",
+   "finding": "F02",
+   "row": "f02-stack-rank8-to-9",
+   "inputs": "stack([[1]*7+[0], [1]*7+[0]], 0) (empty CUDA operands)",
+   "build_E_path": "ops.cpp stack -> check_copy_operands (no ceiling) -> unsqueeze to rank 9 -> cat_nd tensor_cuda/src/kernels.cu:1665-1667 writes DimCopySpec slot 8 (iter_shape[8], iter_str[8], big_str[8]) -> cat's status check",
+   "build_F2_check": "tensor_cuda/src/kernels.cu:1705 check_meta_rank(op, nd + 1) in check_copy_operands, before any unsqueeze or allocation: RuntimeError 'stack: rank 9 exceeds TC_MAX_DIMS=8', 0 CUDA calls"
+  },
+  {
+   "ruling": "R3",
+   "finding": "F01",
+   "row": "f01-swap-short-sin (CPU form) / k2_f01 f01-swap-named-case (GPU)",
+   "inputs": "swap_row_pairs_with_rope with rope insert [2, 2] (GPU) or [0, 2, 2] (CPU), cos [2, 2], sin [1, 2], pos0 0",
+   "build_E_path": "tensor_cuda/src/kernels.cu:8656-8658 (fbe04d8f9) preflight checks sn.ndim() >= 2, sn.shape[1] == D and pos0 + L <= cos rows only; rope_apply tensor_cuda/src/kernels.cu:8493 likewise; rope_kernel reads sin rows 0..1 (elements 2, 3 past a 2-element table)",
+   "build_F2_check": "tensor_cuda/src/kernels.cu:8700 rope_tables_check (cos AND sin spans, subtraction-based, pos0 >= 0) via rope_apply_check, called from the swap preflight tensor_cuda/src/kernels.cu:8903 before any pair's work"
+  },
+  {
+   "ruling": "R4",
+   "finding": "F04",
+   "row": "k2_f04 f04-start-int64max (GPU)",
+   "inputs": "write_rows(buf CUDA [3, 1], src [2, 1], start=INT64_MAX)",
+   "build_E_path": "tensor_cuda/src/kernels.cu:8225 (fbe04d8f9) row = (start + l) % CAP: INT64_MAX + 1 wraps to INT64_MIN, % 3 = -2, a write before buf",
+   "build_F2_check": "tensor_cuda/src/kernels.cu:8418 start %= CAP on the host (start = 1 here); kernel tensor_cuda/src/kernels.cu:8375 wraps without overflow; rows 1 and 2 written (NumPy's (start + l) % CAP with Python integers)"
+  },
+  {
+   "ruling": "R5",
+   "finding": "F07",
+   "row": "k2_f07 f07-where-bool-cond (GPU); f07-where-data-dtype (CPU)",
+   "inputs": "where(bool [False, True, True, True], float32 [4], float32 [4]); where(float32, float32, float16)",
+   "build_E_path": "tensor_cuda/src/kernels.cu:1563 (fbe04d8f9) DISPATCH_FLOAT(x.dtype) loads the condition as T: the 4-byte bool buffer is read as 16 bytes of float32 (element 0's bytes 00 01 01 01 are nonzero -> x); y float16 read as float32 past its end",
+   "build_F2_check": "tensor_cuda/src/kernels.cu:1630 dispatches the condition on its own dtype (cond_at, tensor_cuda/src/kernels.cu:1562); tensor_cuda/src/kernels.cu:1615 refuses x/y dtype mismatch before the allocation when the output has elements"
+  },
+  {
+   "ruling": "R6",
+   "finding": "F12",
+   "row": "f12-axpy-named-case (CPU) / k2_vals (GPU values)",
+   "inputs": "axpy_(param [[1], [2]], other [[10, 20], [30, 40]], 1)",
+   "build_E_path": "tensor_cuda/src/kernels.cu:5544 (fbe04d8f9) refuses only an update with fewer elements; ew_binary broadcasts to [2, 2] and cudaMemcpy copies its first two values [[11], [21]] into param",
+   "build_F2_check": "tensor_cuda/src/kernels.cu:5668 refuses a broadcast that is not param's shape up to leading size-one axes, before ew_scalar's launch: 0 CUDA calls"
+  },
+  {
+   "ruling": "R7",
+   "finding": "F08",
+   "row": "f08-cat-sum-overflow",
+   "inputs": "cat([uint8 [0, 2^62], uint8 [0, 2^62]], 1) (empty CUDA operands)",
+   "build_E_path": "tensor_cuda/src/kernels.cu:1659 (fbe04d8f9) total += extent overflows int64 (signed overflow) -> the constructor sees a negative extent (ValueError 'NDArray: negative extent')",
+   "build_F2_check": "tensor_cuda/src/kernels.cu:1755 __builtin_add_overflow before the allocation: OverflowError 'cat: the concatenated extent at dim 1 overflows int64 at operand 1'"
+  },
+  {
+   "ruling": "R8",
+   "finding": "F09",
+   "row": "f09-slice-uint8 (CPU) / k2_count f09-slice-uint8 (GPU counter)",
+   "inputs": "slice of a uint8 [2, 2] operand, dim 0, start 0, length 1",
+   "build_E_path": "tensor_cuda/src/kernels.cu:5600 (fbe04d8f9) allocates the output (cudaMalloc on CUDA), then DISPATCH_FLOAT throws",
+   "build_F2_check": "tensor_cuda/src/kernels.cu:5729-5731 the float launch dtype is checked before the allocation when the slice has elements: 0 allocations"
+  }
+ ]
+}

@@ -1,0 +1,962 @@
+{
+ "note": "CPU drive: wiring check (a) and site 2 on the CPU lane (b); not a GPU verdict",
+ "wiring": {
+  "B": {
+   "rows": [
+    {
+     "case": "synchronize",
+     "control": {
+      "armed": [],
+      "value": null,
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaDeviceSynchronize"
+      ],
+      "value": null,
+      "outcome": "ok",
+      "fired": {
+       "cudaDeviceSynchronize": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/B/pkg"
+    },
+    {
+     "case": "oom_drain",
+     "control": {
+      "armed": [
+       "cudaMalloc"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMalloc": 0
+      }
+     },
+     "injected": {
+      "armed": [
+       "cudaMalloc",
+       "cudaStreamSynchronize"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMalloc": 0,
+       "cudaStreamSynchronize": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/B/pkg"
+    },
+    {
+     "case": "oom_drain_pooled",
+     "control": {
+      "armed": [
+       "cudaMallocAsync"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMallocAsync": 0
+      }
+     },
+     "injected": {
+      "armed": [
+       "cudaMallocAsync",
+       "cudaStreamSynchronize"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMallocAsync": 0,
+       "cudaStreamSynchronize": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/B/pkg"
+    },
+    {
+     "case": "zeros",
+     "control": {
+      "armed": [],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+       "equals_expected": true,
+       "informative": false,
+       "expected_informative": false
+      },
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemset"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+       "equals_expected": true,
+       "informative": false,
+       "expected_informative": false
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMemset": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/B/pkg"
+    },
+    {
+     "case": "from_host",
+     "control": {
+      "armed": [],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemcpy"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMemcpy": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/B/pkg"
+    },
+    {
+     "case": "to_host",
+     "control": {
+      "armed": [],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemcpy"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMemcpy": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/B/pkg"
+    },
+    {
+     "case": "clone",
+     "control": {
+      "armed": [],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemcpy"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMemcpy": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/B/pkg"
+    },
+    {
+     "case": "to_d2h",
+     "control": {
+      "armed": [],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemcpy"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMemcpy": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/B/pkg"
+    },
+    {
+     "case": "to_h2d",
+     "control": {
+      "armed": [],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemcpy"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMemcpy": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/B/pkg"
+    },
+    {
+     "case": "axpy_",
+     "control": {
+      "armed": [],
+      "outcome": "raised",
+      "exc_type": "RuntimeError",
+      "message": "CUDA error at ew_scalar: no CUDA-capable device is detected",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemcpy"
+      ],
+      "outcome": "raised",
+      "exc_type": "RuntimeError",
+      "message": "CUDA error at ew_scalar: no CUDA-capable device is detected",
+      "fired": {
+       "cudaMemcpy": 0
+      },
+      "param_after": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": false,
+       "informative": true,
+       "expected_informative": true
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/B/pkg"
+    },
+    {
+     "case": "packed_prefill_dump",
+     "outcome": "child_failed",
+     "returncode": 1,
+     "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 110, in <module>\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng5s/tensor_cuda/build-eng5s/B_H/pkg/tensor_cuda/__init__.py\", line 75, in tensor\n    return _C.tensor(arr, device, requires_grad)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: cudaMalloc failed: no CUDA-capable device is detected\n"
+    },
+    {
+     "case": "axpy_empty",
+     "control": {
+      "armed": [],
+      "value": [
+       0
+      ],
+      "outcome": "ok",
+      "fired": {}
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/B/pkg"
+    }
+   ],
+   "child_failed": [
+    [
+     "packed_prefill_dump",
+     "r/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng5s/tensor_cuda/build-eng5s/B_H/pkg/tensor_cuda/__init__.py\", line 75, in tensor\n    return _C.tensor(arr, device, requires_grad)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: cudaMalloc failed: no CUDA-capable device is detected\n"
+    ]
+   ],
+   "verdict_wiring": "RECORDED (reference arm)"
+  },
+  "S": {
+   "rows": [
+    {
+     "case": "synchronize",
+     "control": {
+      "armed": [],
+      "value": null,
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaDeviceSynchronize"
+      ],
+      "value": null,
+      "outcome": "ok",
+      "fired": {
+       "cudaDeviceSynchronize": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/S/pkg"
+    },
+    {
+     "case": "oom_drain",
+     "control": {
+      "armed": [
+       "cudaMalloc"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMalloc": 0
+      }
+     },
+     "injected": {
+      "armed": [
+       "cudaMalloc",
+       "cudaStreamSynchronize"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMalloc": 0,
+       "cudaStreamSynchronize": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/S/pkg"
+    },
+    {
+     "case": "oom_drain_pooled",
+     "control": {
+      "armed": [
+       "cudaMallocAsync"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMallocAsync": 0
+      }
+     },
+     "injected": {
+      "armed": [
+       "cudaMallocAsync",
+       "cudaStreamSynchronize"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMallocAsync": 0,
+       "cudaStreamSynchronize": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/S/pkg"
+    },
+    {
+     "case": "zeros",
+     "control": {
+      "armed": [],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+       "equals_expected": true,
+       "informative": false,
+       "expected_informative": false
+      },
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemset"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+       "equals_expected": true,
+       "informative": false,
+       "expected_informative": false
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMemset": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/S/pkg"
+    },
+    {
+     "case": "from_host",
+     "control": {
+      "armed": [],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemcpy"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMemcpy": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/S/pkg"
+    },
+    {
+     "case": "to_host",
+     "control": {
+      "armed": [],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemcpy"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMemcpy": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/S/pkg"
+    },
+    {
+     "case": "clone",
+     "control": {
+      "armed": [],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemcpy"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMemcpy": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/S/pkg"
+    },
+    {
+     "case": "to_d2h",
+     "control": {
+      "armed": [],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemcpy"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMemcpy": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/S/pkg"
+    },
+    {
+     "case": "to_h2d",
+     "control": {
+      "armed": [],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemcpy"
+      ],
+      "value": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": true,
+       "informative": true,
+       "expected_informative": true
+      },
+      "outcome": "ok",
+      "fired": {
+       "cudaMemcpy": 0
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/S/pkg"
+    },
+    {
+     "case": "axpy_",
+     "control": {
+      "armed": [],
+      "outcome": "raised",
+      "exc_type": "RuntimeError",
+      "message": "CUDA error at ew_scalar: no CUDA-capable device is detected",
+      "fired": {}
+     },
+     "injected": {
+      "armed": [
+       "cudaMemcpy"
+      ],
+      "outcome": "raised",
+      "exc_type": "RuntimeError",
+      "message": "CUDA error at ew_scalar: no CUDA-capable device is detected",
+      "fired": {
+       "cudaMemcpy": 0
+      },
+      "param_after": {
+       "shape": [
+        4096
+       ],
+       "dtype": "float32",
+       "sha256": "f1d99d4651fe317f5f683bd6fa876dfe0fbbf7189620cf919eeca3c3eade46bd",
+       "equals_expected": false,
+       "informative": true,
+       "expected_informative": true
+      }
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/S/pkg"
+    },
+    {
+     "case": "packed_prefill_dump",
+     "outcome": "child_failed",
+     "returncode": 1,
+     "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 110, in <module>\n  File \"/mnt/ForgeRealm/Project-Tensor/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng5s/tensor_cuda/build-eng5s/S_H/pkg/tensor_cuda/__init__.py\", line 75, in tensor\n    return _C.tensor(arr, device, requires_grad)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: cudaMalloc failed: no CUDA-capable device is detected\n"
+    },
+    {
+     "case": "axpy_empty",
+     "control": {
+      "armed": [],
+      "outcome": "raised",
+      "exc_type": "RuntimeError",
+      "message": "axpy_: cudaMemcpy failed: cudaErrorNoDevice: no CUDA-capable device is detected",
+      "fired": {}
+     },
+     "synchronize_after": "ok",
+     "child_returncode": 0,
+     "package": "tensor_cuda/build-eng5s/S/pkg"
+    }
+   ],
+   "child_failed": [
+    [
+     "packed_prefill_dump",
+     "r/Fork/tensor_fork_apa/WorkTree/tensor_fork_apa_wt_eng5s/tensor_cuda/build-eng5s/S_H/pkg/tensor_cuda/__init__.py\", line 75, in tensor\n    return _C.tensor(arr, device, requires_grad)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: cudaMalloc failed: no CUDA-capable device is detected\n"
+    ]
+   ],
+   "verdict_wiring": "FAIL"
+  }
+ },
+ "site2_cpu_lane": {
+  "B:oom_drain": {
+   "case": "oom_drain",
+   "control": {
+    "armed": [
+     "cudaMalloc"
+    ],
+    "outcome": "raised",
+    "exc_type": "RuntimeError",
+    "message": "cudaMalloc failed: no CUDA-capable device is detected",
+    "fired": {
+     "cudaMalloc": 1
+    }
+   },
+   "injected": {
+    "armed": [
+     "cudaMalloc",
+     "cudaStreamSynchronize"
+    ],
+    "outcome": "raised",
+    "exc_type": "RuntimeError",
+    "message": "cudaMalloc failed: no CUDA-capable device is detected",
+    "fired": {
+     "cudaMalloc": 1,
+     "cudaStreamSynchronize": 1
+    }
+   },
+   "synchronize_after": "ok"
+  },
+  "B:oom_drain_pooled": {
+   "case": "oom_drain_pooled",
+   "control": {
+    "armed": [
+     "cudaMallocAsync"
+    ],
+    "outcome": "raised",
+    "exc_type": "RuntimeError",
+    "message": "cudaMallocAsync failed: no CUDA-capable device is detected",
+    "fired": {
+     "cudaMallocAsync": 1
+    }
+   },
+   "injected": {
+    "armed": [
+     "cudaMallocAsync",
+     "cudaStreamSynchronize"
+    ],
+    "outcome": "raised",
+    "exc_type": "RuntimeError",
+    "message": "cudaMallocAsync failed: no CUDA-capable device is detected",
+    "fired": {
+     "cudaMallocAsync": 1,
+     "cudaStreamSynchronize": 1
+    }
+   },
+   "synchronize_after": "ok"
+  },
+  "S:oom_drain": {
+   "case": "oom_drain",
+   "control": {
+    "armed": [
+     "cudaMalloc"
+    ],
+    "outcome": "raised",
+    "exc_type": "RuntimeError",
+    "message": "Storage (cudaMalloc OOM retry): cudaStreamSynchronize (drain) failed: cudaErrorNoDevice: no CUDA-capable device is detected",
+    "fired": {
+     "cudaMalloc": 1
+    }
+   },
+   "injected": {
+    "armed": [
+     "cudaMalloc",
+     "cudaStreamSynchronize"
+    ],
+    "outcome": "raised",
+    "exc_type": "RuntimeError",
+    "message": "Storage (cudaMalloc OOM retry): cudaStreamSynchronize (drain) failed: cudaErrorInvalidValue: invalid argument",
+    "fired": {
+     "cudaMalloc": 1,
+     "cudaStreamSynchronize": 1
+    }
+   },
+   "synchronize_after": "ok"
+  },
+  "S:oom_drain_pooled": {
+   "case": "oom_drain_pooled",
+   "control": {
+    "armed": [
+     "cudaMallocAsync"
+    ],
+    "outcome": "raised",
+    "exc_type": "RuntimeError",
+    "message": "Storage (cudaMallocAsync OOM retry): cudaStreamSynchronize (drain) failed: cudaErrorNoDevice: no CUDA-capable device is detected",
+    "fired": {
+     "cudaMallocAsync": 1
+    }
+   },
+   "injected": {
+    "armed": [
+     "cudaMallocAsync",
+     "cudaStreamSynchronize"
+    ],
+    "outcome": "raised",
+    "exc_type": "RuntimeError",
+    "message": "Storage (cudaMallocAsync OOM retry): cudaStreamSynchronize (drain) failed: cudaErrorInvalidValue: invalid argument",
+    "fired": {
+     "cudaMallocAsync": 1,
+     "cudaStreamSynchronize": 1
+    }
+   },
+   "synchronize_after": "ok"
+  }
+ },
+ "site2_checks": {
+  "S:oom_drain raises in the S1 form": true,
+  "B:oom_drain continues to the retried allocation": true,
+  "S:oom_drain_pooled raises in the S1 form": true,
+  "B:oom_drain_pooled continues to the retried allocation": true
+ }
+}

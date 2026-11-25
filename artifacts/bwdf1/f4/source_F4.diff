@@ -1,0 +1,88 @@
+diff --git a/tensor_cuda/src/kernels.cu b/tensor_cuda/src/kernels.cu
+index 6ab115b45..864375940 100644
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -8595,9 +8595,13 @@ static int64_t checked_add3(int64_t a, int64_t b, int64_t c, const std::string&
+ // pair's output ([0, 2^62, 2] uint8: 2^63 bytes, counting the zero as 1) was refused. The text keeps the
+ // constructor's, after "<op>: the output " and before the operands. Called by export_rows_check, splice_rows_check,
+ // evict_rows_check, export_rope_rows_check and rope_apply_check, i.e. by every pair preflight (export_row_pair,
+-// export_row_pairs, swap_row_pairs_with_rope, evict_row_pairs, and the arena through swap or evict). Only splice can
+-// grow an extent; the others' outputs are no larger than an operand, so their call cannot fire and is kept for one
+-// rule at every preflight. Prior art: the check-then-act split; ENG3-F1's byte bound (this file). No other prior art
++// export_row_pairs, swap_row_pairs_with_rope, evict_row_pairs, and the arena through swap or evict). Splice is the
++// op that grows an extent past its operands'; the others' outputs have no larger extents than an operand's, but an
++// operand can itself lie beyond the byte bound: an empty tensor reshaped to [0, 2^62, 2] (uint8) is a valid view
++// (no bytes are allocated for it), and export_rows of its whole span has the same output shape, which this check
++// refuses (BWD-F4 H3, review BWDF1R3-F03; before, this text said only splice can fire it). For an operand that was
++// built by the constructor, the bound holds already and the call cannot fire. It is kept for one rule at every
++// preflight. Prior art: the check-then-act split; ENG3-F1's byte bound (this file). No other prior art
+ // known to me. Ours: running the constructor's bound in the preflight.
+ static void preflight_out_bound(const char* op, const Shape& out_shape, DType dtype, const std::string& ctx) {
+   try {
+@@ -8795,7 +8799,10 @@ __global__ void rope_kernel(const T* __restrict__ x, const T* __restrict__ cs,
+ // size-one axes leaves the same contiguous buffer (no specific prior art known to me for its use here). Ours: the
+ // shared validator, its term order and the reads condition on the span.
+ static bool rope_table_layout_ok(const NDArray& t, int64_t D) {
+-  if (t.ndim() < 2 || t.shape[1] != D) return false;
++  // BWD-F4 H2 (review BWDF1R3-F02): a table above the engine's rank ceiling is refused (ruling D1: TC_MAX_DIMS = 8),
++  // so [T, D, 1, 1, 1, 1, 1, 1, 1] (rank 9) is no longer accepted by the trailing-singleton rule. Rank 8 and below
++  // are unchanged. No prior art known to me (the ceiling is this engine's own D1 ruling).
++  if (t.ndim() < 2 || t.ndim() > TC_MAX_DIMS || t.shape[1] != D) return false;
+   for (int i = 2; i < t.ndim(); ++i)
+     if (t.shape[i] != 1) return false;
+   return true;
+diff --git a/tensor_cuda/src/ops.cpp b/tensor_cuda/src/ops.cpp
+index 3da30373c..fd9693504 100644
+--- a/tensor_cuda/src/ops.cpp
++++ b/tensor_cuda/src/ops.cpp
+@@ -1060,8 +1060,33 @@ Tensor mean(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+   // the axis twice, before sum's own checks ran. Valid, distinct axes give the same normalized values, so the count
+   // and the result are unchanged. Prior art: NumPy's normalize_axis_tuple ("duplicate value in axis").
+   const std::vector<int> nax = tc::normalize_reduce_axes("mean", axes, a.shape());
+-  if (axes.empty()) cnt = a.data().numel();
+-  else for (int d : nax) cnt *= a.shape()[d];
++  // BWD-F4 H1 (review BWDF1R3-F01): the count is computed without signed overflow. Before, the selected extents were
++  // multiplied in axis order in int64, so an empty tensor reshaped to [2^32, 2^32, 0, 0] made mean([0, 1, 2])
++  // multiply 2^32 by 2^32 (2^64, signed overflow) before the 0 was reached. Now: decide emptiness first (any
++  // selected extent 0 gives count 0, the value the old product gave whenever it did not overflow), then multiply
++  // with a checked product and refuse an overflowing one before any work (sum below has not run). Every input
++  // whose product does not overflow gets the same count as before. Prior art: GCC's __builtin_mul_overflow (2015);
++  // NumPy's rule that an empty reduction axis gives count 0; the same decide-emptiness-first rule in the reducer
++  // (kernels.cu, BWD-F2 R7) and in P1T-FIX2's numel_of. No other prior art known to me.
++  if (axes.empty()) {
++    cnt = a.data().numel();
++  } else {
++    bool selected_empty = false;
++    for (int d : nax) selected_empty = selected_empty || a.shape()[d] == 0;
++    if (selected_empty) {
++      cnt = 0;
++    } else {
++      for (int d : nax) {
++        if (__builtin_mul_overflow(cnt, a.shape()[d], &cnt)) {
++          std::string st = "[", at = "[";
++          for (size_t i = 0; i < a.shape().size(); ++i) st += (i ? ", " : "") + std::to_string(a.shape()[i]);
++          for (size_t i = 0; i < nax.size(); ++i) at += (i ? ", " : "") + std::to_string(axes[i]);
++          throw std::overflow_error("mean: the reduced element count of " + st + "] overflows int64 (axes " + at +
++                                    "]); refused before any allocation");
++        }
++      }
++    }
++  }
+   return mul_scalar(sum(a, axes, keepdim), 1.0 / (double)cnt);
+ }
+ 
+diff --git a/tensor_cuda/tests/test_bwdf1_copy_ops.py b/tensor_cuda/tests/test_bwdf1_copy_ops.py
+index cc4087e18..7efabe6e7 100644
+--- a/tensor_cuda/tests/test_bwdf1_copy_ops.py
++++ b/tensor_cuda/tests/test_bwdf1_copy_ops.py
+@@ -267,7 +267,9 @@ def test_cpu_r1_no_op_member_not_refused(r1_results, rid):
+ 
+ # BWD-F3 E1 (artifacts/bwdf1/f3/INTENDED_CHANGES_F3.json): two BWD-F1 refusal rows whose export has no output rows
+ # (an empty cache). The validator bounds the read span only when the kernel reads, so each returns its empty result
+-# with 0 CUDA calls (export_rope_rows-pos-negative: Build B's result; export_rope_rows-past-cos: Build B refused it).
++# with 0 CUDA calls. Build B refused both (its export_rope_rows checked `pos0 < 0 || pos0 + len > cs.shape[0]` on every
++# call, empty or not); only Build B's rope_apply lacked the `pos0 < 0` check. BWD-F4 H3 (review BWDF1R3-F04): this
++# comment said "Build B's result" for export_rope_rows-pos-negative; the accepted empty result is BWD-F3's ruling E1.
+ E1_ROWS = [
+     ("export_rope_rows-pos-negative", "export_rope_rows", "c=C((0,4,2)); cs=C((0,2)); sn=C((0,2))",
+      "tc.export_rope_rows(c, cs, sn, 1, 0, 0, -1)", (0, 0, 2)),

@@ -1,0 +1,288 @@
+diff --git a/tensor_cuda/include/tc/core.h b/tensor_cuda/include/tc/core.h
+index 5255e9203..ef1a4bd87 100644
+--- a/tensor_cuda/include/tc/core.h
++++ b/tensor_cuda/include/tc/core.h
+@@ -51,6 +51,11 @@ using Shape = std::vector<int64_t>;
+ // entry points refuse such shapes first (bindings.cpp, the zero-extent rule).
+ int64_t numel_of(const Shape& shape);
+ Shape contiguous_strides(const Shape& shape);
++// BWD-F3 E4 (review BWDF1R2-F07): the NDArray constructor's byte bound as an allocation-free function. Refuses a
++// negative extent (std::invalid_argument) and a shape whose bytes, counting a zero extent as 1, exceed int64
++// (std::overflow_error), with the constructor's texts; returns the bytes the constructor allocates (0 for an empty
++// shape). The constructor calls it, so a preflight that calls it refuses exactly what construction would refuse.
++size_t ndarray_checked_nbytes(const Shape& shape, DType dtype);
+ 
+ // --------------------------------------------------------------------- Storage
+ // Reference-counted device (or host) memory buffer.
+@@ -175,6 +180,13 @@ NDArray reduce_to(const NDArray& a, const Shape& target);
+ 
+ // argmax/argmin along a single axis (returns int64, axis removed).
+ NDArray reduce_arg(const NDArray& a, int axis, bool is_max);
++// BWD-F3 E3 (review BWDF1R2-F06): NumPy's reduction-axis rule for every reduction entry. Each axis is normalized
++// (a negative axis counts from the end) and range-checked against `nd`, and a repeated axis is refused, before the
++// caller indexes a shape or writes a launch-spec slot. Refusals: std::out_of_range "<op>: axis <a> is out of bounds
++// for array of dimension <nd>" (Python IndexError) and std::invalid_argument "<op>: duplicate value in axis"
++// (Python ValueError), each followed by the axes and the operand's shape. Returns the normalized axes in the given
++// order (an empty list stays empty: the callers read it as "every axis").
++std::vector<int> normalize_reduce_axes(const char* op, const std::vector<int>& axes, const Shape& shape);
+ // Block-per-row argmax over the LAST axis only (returns int64, axis removed).
+ // Decode-loop fast path (Phase 1.1): grid-stride + warp-shuffle reduction so
+ // a single row (e.g. one decode step's vocab-sized logits) still parallelizes
+diff --git a/tensor_cuda/src/kernels.cu b/tensor_cuda/src/kernels.cu
+index 54b925f19..6ab115b45 100644
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -532,8 +532,11 @@ Storage::~Storage() {
+ }
+ 
+ // --------------------------------------------------------------------- NDArray
+-NDArray::NDArray(const Shape& shape_, DType dtype_, Device device_)
+-    : shape(shape_), dtype(dtype_), device(device_) {
++// BWD-F3 E4 (review BWDF1R2-F07): the constructor's byte bound, moved out of the constructor unchanged (same terms,
++// same order, same texts) so the pair preflights can run it on an output shape before any pair's work. The
++// constructor below calls it and allocates what it returns. Prior art: the ENG3-F1 R1 text kept below; the
++// check-then-act split (no specific prior art known to me). Ours: sharing the constructor's own function.
++size_t ndarray_checked_nbytes(const Shape& shape_, DType dtype_) {
+   // ENG3-F1 R1: check the byte bound before forming a product or allocating.
+   // Count zeros as 1 for the bound (the existing checked_nbytes rule); the
+   // actual allocation is zero if any extent is zero. All bytes fit int64,
+@@ -562,7 +565,12 @@ NDArray::NDArray(const Shape& shape_, DType dtype_, Device device_)
+     }
+     bytes *= extent;
+   }
+-  storage = std::make_shared<Storage>(empty ? 0 : bytes, device_);
++  return empty ? 0 : bytes;
++}
++
++NDArray::NDArray(const Shape& shape_, DType dtype_, Device device_)
++    : shape(shape_), dtype(dtype_), device(device_) {
++  storage = std::make_shared<Storage>(ndarray_checked_nbytes(shape_, dtype_), device_);  // BWD-F3 E4: shared bound
+ }
+ NDArray NDArray::empty(const Shape& shape, DType dtype, Device device) {
+   return NDArray(shape, dtype, device);
+@@ -1304,6 +1312,42 @@ NDArray ge_scalar(const NDArray& a, double sval) {
+ }
+ 
+ // ------------------------------------------------------------- reductions
++// BWD-F3 E3 (review BWDF1R2-F06): the reduction-axis rule, shared by every reduction entry (reduce_impl, which writes
++// ReduceSpec and serves reduce_sum / max / min / prod and every ops.cpp wrapper; reduce_arg; ops::mean, which reads
++// the axes' extents itself before its sum). Before, each entry wrote `ax < 0 ? ax + nd : ax` straight into
++// ReduceSpec::reduced[] and keep_shape[] and read a.shape[d]: sum([8]) on a rank-1 operand wrote reduced[8] (past the
++// 8-slot array) and read a one-element shape vector at 8; sum([0, 0]) on [2] marked one axis but multiplied its
++// extent twice (red_size 4), and the contiguous-tail kernel then read four elements of a two-element buffer. Now each
++// axis is normalized and range-checked, and a repeated axis is refused, before anything is indexed or written.
++// Valid, distinct axes are returned unchanged in order, so every accepted call computes exactly what it did before.
++// Prior art: NumPy's normalize_axis_tuple / normalize_axis_index (numpy.core.numeric, numpy/core/src/multiarray;
++// AxisError "axis 8 is out of bounds for array of dimension 1", ValueError "duplicate value in axis"); taken as the
++// rule and the texts. Ours: one helper shared by the engine's entries, and the operand context after the text.
++std::vector<int> normalize_reduce_axes(const char* op, const std::vector<int>& axes, const Shape& shape) {
++  const int nd = (int)shape.size();
++  auto ctx = [&]() {
++    std::string t = " (axes [";
++    for (size_t i = 0; i < axes.size(); ++i) t += (i ? ", " : "") + std::to_string(axes[i]);
++    return t + "], operand " + bcast_shape_text(shape) + ")";
++  };
++  std::vector<int> out;
++  out.reserve(axes.size());
++  std::vector<char> seen((size_t)nd, 0);
++  for (int ax : axes) {
++    if (ax < -nd || ax >= nd)
++      throw std::out_of_range(std::string(op) + ": axis " + std::to_string(ax) +
++                              " is out of bounds for array of dimension " + std::to_string(nd) + ctx() +
++                              "; refused before any allocation");
++    const int d = ax < 0 ? ax + nd : ax;
++    if (seen[(size_t)d])
++      throw std::invalid_argument(std::string(op) + ": duplicate value in axis" + ctx() +
++                                  "; refused before any allocation");
++    seen[(size_t)d] = 1;
++    out.push_back(d);
++  }
++  return out;
++}
++
+ namespace {
+ struct ReduceSpec {
+   int ndim;
+@@ -1393,6 +1437,9 @@ __global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n)
+ NDArray reduce_impl(const NDArray& a, std::vector<int> axes, bool keepdim, int mode) {
+   int nd = a.ndim();
+   check_meta_rank("reduce", nd, "operand " + bcast_shape_text(a.shape));  // BWD-F2 R2: ReduceSpec / coord slots
++  // BWD-F3 E3 (BWDF1R2-F06): every axis normalized, range-checked and distinct before any shape read or spec write;
++  // the loops below then read only valid, distinct, non-negative axes.
++  axes = normalize_reduce_axes("reduce", axes, a.shape);
+   if (axes.empty()) for (int d = 0; d < nd; ++d) axes.push_back(d);
+   ReduceSpec s{};
+   s.ndim = nd;
+@@ -1609,10 +1656,14 @@ NDArray where_nd(const NDArray& c, const NDArray& x, const NDArray& y) {
+   check_meta_rank("where", std::max({c.ndim(), x.ndim(), y.ndim()}), ops_text);  // BWD-F2 R2: Dim3Spec's slots
+   Shape os = broadcast_shape3(c.shape, x.shape, y.shape);  // BWD-F1 Z2: NumPy's rule, all three shapes named
+   require_readable_operands("where", os, {"cond", "x", "y"}, {&c.shape, &x.shape, &y.shape});  // BWD-F1 Z2 guard
+-  // BWD-F2 R5 (BWDF1R1-F07): the data operands are both read as x's dtype, so they must match when anything is read
+-  // (an empty output reads nothing and keeps Build B's result, as R1 rules for the copy ops). Checked before the
++  // BWD-F2 R5 (BWDF1R1-F07): the data operands are both read as x's dtype, so they must match. Checked before the
+   // allocation; the condition needs no check of its own, it is loaded in its own dtype below.
+-  if (numel_of(os) > 0 && x.dtype != y.dtype)
++  // BWD-F3 D1 (closes BWDF1R2-F05 by ruling): where's contract requires x and y to match, so the mismatch is refused
++  // for every call, before any work, including an empty output (BWD-F2 accepted that one as Build B's empty no-op,
++  // and refused a non-empty one even when the condition never selects y). A domain refusal (BOUNDARY_F3.json).
++  // Prior art: NumPy's where promotes x and y to one result dtype (no implicit promotion exists here, so a mismatch
++  // is refused); no other prior art known to me.
++  if (x.dtype != y.dtype)
+     throw std::runtime_error("where: x has dtype " + std::string(dtype_name(x.dtype)) + " but y has " +
+                              dtype_name(y.dtype) + "; the data operands must match (" + ops_text +
+                              "); refused before any allocation");
+@@ -5816,7 +5867,9 @@ void axis_split(const Shape& shape, int axis, int64_t& outer, int64_t& A, int64_
+ 
+ NDArray reduce_arg(const NDArray& a, int axis, bool is_max) {
+   int nd = a.ndim();
+-  if (axis < 0) axis += nd;
++  // BWD-F3 E3: the single axis range-checked before axis_split reads a.shape[axis] (before, an axis outside
++  // [-nd, nd) read past the shape vector). In-range axes are unchanged. Prior art: NumPy's normalize_axis_index.
++  axis = normalize_reduce_axes(is_max ? "argmax" : "argmin", {axis}, a.shape)[0];
+   int64_t outer, A, inner; axis_split(a.shape, axis, outer, A, inner);
+   Shape os; for (int d = 0; d < nd; ++d) if (d != axis) os.push_back(a.shape[d]);
+   if (os.empty()) os.push_back(1);
+@@ -8535,6 +8588,25 @@ static int64_t checked_add3(int64_t a, int64_t b, int64_t c, const std::string&
+   return s;
+ }
+ 
++// BWD-F3 E4 (review BWDF1R2-F07): a row-cache check runs the output's byte bound, the NDArray constructor's own
++// function (ndarray_checked_nbytes), on the output shape it will construct, so a pair op refuses an output that
++// cannot be built before any pair's allocation or launch. Before, splice_rows_check proved the new extent fits int64
++// but left the byte bound to the constructor: in a pair list, an earlier pair allocated and launched before a later
++// pair's output ([0, 2^62, 2] uint8: 2^63 bytes, counting the zero as 1) was refused. The text keeps the
++// constructor's, after "<op>: the output " and before the operands. Called by export_rows_check, splice_rows_check,
++// evict_rows_check, export_rope_rows_check and rope_apply_check, i.e. by every pair preflight (export_row_pair,
++// export_row_pairs, swap_row_pairs_with_rope, evict_row_pairs, and the arena through swap or evict). Only splice can
++// grow an extent; the others' outputs are no larger than an operand, so their call cannot fire and is kept for one
++// rule at every preflight. Prior art: the check-then-act split; ENG3-F1's byte bound (this file). No other prior art
++// known to me. Ours: running the constructor's bound in the preflight.
++static void preflight_out_bound(const char* op, const Shape& out_shape, DType dtype, const std::string& ctx) {
++  try {
++    (void)ndarray_checked_nbytes(out_shape, dtype);
++  } catch (const std::overflow_error& e) {
++    throw std::overflow_error(std::string(op) + ": the output " + e.what() + ctx);
++  }
++}
++
+ // BWD-F1 Amendment 1 C2: the row-cache copy ops' checks as host functions, so the paired/batched ops below can run
+ // every pair's checks before any pair's allocation or launch. Terms and old message texts (now prefixes, followed by
+ // the operand shapes) are unchanged; `start + len > old_seq` is written as `len > old_seq - start` (no overflow).
+@@ -8550,6 +8622,9 @@ int export_rows_check(const NDArray& cache, int dim, int64_t start, int64_t len)
+   int64_t old_seq = cache.shape[d];
+   if (start < 0 || len < 0 || start > old_seq || len > old_seq - start)
+     throw std::runtime_error("export_rows: invalid span" + t);
++  Shape out_shape = cache.shape;  // BWD-F3 E4: the output's byte bound in the preflight (cannot fire: len <= old_seq)
++  out_shape[d] = len;
++  preflight_out_bound("export_rows", out_shape, cache.dtype, t);
+   return d;
+ }
+ 
+@@ -8600,7 +8675,11 @@ int splice_rows_check(const NDArray& old_cache, const Shape& insert_shape, DType
+     throw std::runtime_error("splice_rows: invalid head/tail" + t);
+   // BWD-F2 R7 (BWDF1R1-F08): the output extent head + insert + (old - tail) as a checked sum, here in the check so a
+   // batched op refuses it before any pair's work (each term is >= 0 after the line above).
+-  (void)checked_add3(head_tokens, insert_shape[d], old_seq - tail_start, "splice_rows: the output extent" + t);
++  Shape out_shape = old_cache.shape;
++  out_shape[d] = checked_add3(head_tokens, insert_shape[d], old_seq - tail_start, "splice_rows: the output extent" + t);
++  // BWD-F3 E4 (BWDF1R2-F07): the output's byte bound, here in the check, so a pair op refuses it before any pair's
++  // allocation or launch (before, only the constructor checked it, after earlier pairs had run).
++  preflight_out_bound("splice_rows", out_shape, old_cache.dtype, t);
+   return d;
+ }
+ 
+@@ -8641,6 +8720,9 @@ int evict_rows_check(const NDArray& old_cache, int dim, int64_t head_tokens, int
+   if (head_tokens < 0 || drop_tokens < 0 || head_tokens > old_seq ||
+       drop_tokens > old_seq - head_tokens)
+     throw std::runtime_error("evict_rows: drop exceeds live tail" + t);
++  Shape out_shape = old_cache.shape;  // BWD-F3 E4: the output's byte bound (cannot fire: the extent only shrinks)
++  out_shape[d] = old_seq - drop_tokens;
++  preflight_out_bound("evict_rows", out_shape, old_cache.dtype, t);
+   return d;
+ }
+ 
+@@ -8693,20 +8775,42 @@ __global__ void rope_kernel(const T* __restrict__ x, const T* __restrict__ cs,
+ //  * only when the kernel will read (`reads`): both tables on the data's device, and a supported floating dtype (the
+ //    launch dtype DISPATCH_FLOAT would refuse after allocating). An empty call reads nothing and keeps Build B's
+ //    result (R1's rule: dtype and device terms only where bytes are read).
+-// Rank, shape and span terms hold for every call, as R1 keeps rank and extent checks for every operand.
++// (BWD-F2 held the rank, shape and span terms for every call, as R1 keeps rank and extent checks for every operand;
++// BWD-F3 moves the span under `reads`, E1, and widens the rank term, E2.)
++// BWD-F3 (review BWDF1R2-F01, F02, F08), the terms now, in order:
++//  * dtype equality with the data, for every call (D1: a RoPE table's floating dtype must match the data's; this
++//    closes F08 by ruling and is Build B's term too);
++//  * layout (E2, F02): each table is a contiguous (T, D) storage: rank 2, or a rank above 2 whose extra (trailing)
++//    extents are all 1, with D columns. The kernels index the flattened storage at (pos0 + l) * D + d, which is the
++//    same element for [T, D] and [T, D, 1, ...] (NDArray storage is always contiguous). Ranks below 2, and extra
++//    extents other than 1, are refused. Build B read sin's [T, D, 1] correctly and refused cos's; both are accepted;
++//  * span (E1, F01), only when the kernel reads (`reads`: the launch has elements): the read rows [pos0, pos0 + rows)
++//    lie in both tables, with subtraction-based bounds. An empty launch (rows = 0, D = 0 or an empty outer extent)
++//    reads no table row and passes whatever the tables' lengths and pos0 (BWD-F2 refused it when a table was short);
++//  * device and launch dtype, only when the kernel reads (BWD-F2's R1 terms, unchanged).
++// The span term is unchanged for every launch that reads, so every refusal and result with elements is BWD-F2's.
+ // Prior art: the RoPE formulation (Su et al., 2021, "RoFormer: Enhanced Transformer with Rotary Position Embedding"),
+ // whose cos/sin tables are indexed by absolute position; taken as the read pattern. Subtraction-based bounds: CERT
+-// INT30-C/INT32-C style (unverified -- lead to check). Ours: the shared validator and its term order.
++// INT30-C/INT32-C style (unverified -- lead to check). The trailing-singleton layout rule: NumPy's squeeze of
++// size-one axes leaves the same contiguous buffer (no specific prior art known to me for its use here). Ours: the
++// shared validator, its term order and the reads condition on the span.
++static bool rope_table_layout_ok(const NDArray& t, int64_t D) {
++  if (t.ndim() < 2 || t.shape[1] != D) return false;
++  for (int i = 2; i < t.ndim(); ++i)
++    if (t.shape[i] != 1) return false;
++  return true;
++}
++
+ static void rope_tables_check(const char* op, const char* xname, DType xdtype, const Device& xdevice, int64_t D,
+                        int64_t rows, int64_t pos0, const NDArray& cs, const NDArray& sn, bool reads,
+                        const std::string& ctx) {
+   const std::string o(op);
+   if (cs.dtype != xdtype || sn.dtype != xdtype)
+     throw std::runtime_error(o + ": table/" + xname + " dtype mismatch" + ctx);
+-  if (cs.ndim() != 2 || sn.ndim() != 2 || cs.shape[1] != D || sn.shape[1] != D)
++  if (!rope_table_layout_ok(cs, D) || !rope_table_layout_ok(sn, D))
+     throw std::runtime_error(o + ": tables must be (T, D)" + ctx);
+-  if (pos0 < 0 || rows < 0 || pos0 > cs.shape[0] || rows > cs.shape[0] - pos0 || pos0 > sn.shape[0] ||
+-      rows > sn.shape[0] - pos0)
++  if (reads && (pos0 < 0 || rows < 0 || pos0 > cs.shape[0] || rows > cs.shape[0] - pos0 || pos0 > sn.shape[0] ||
++                rows > sn.shape[0] - pos0))
+     throw std::runtime_error(o + ": position past table end" + ctx);
+   if (reads && (!same_device(cs.device, xdevice) || !same_device(sn.device, xdevice)))
+     throw std::runtime_error(o + ": tables must be on the " + xname + "'s device" + ctx);
+@@ -8727,6 +8831,7 @@ static void rope_apply_check(const NDArray& x, const NDArray& cs, const NDArray&
+   if (D % 2) throw std::runtime_error("rope_apply: odd head_dim" + rope_ctx("x", x, cs, sn, pos0));
+   rope_tables_check("rope_apply", "x", x.dtype, x.device, D, L, pos0, cs, sn, x.numel() > 0,
+                     rope_ctx("x", x, cs, sn, pos0));
++  preflight_out_bound("rope_apply", x.shape, x.dtype, rope_ctx("x", x, cs, sn, pos0));  // BWD-F3 E4 (output = x)
+ }
+ 
+ NDArray rope_apply(const NDArray& x, const NDArray& cs, const NDArray& sn,
+@@ -8800,6 +8905,7 @@ int export_rope_rows_check(const NDArray& cache, const NDArray& cs, const NDArra
+   out_shape[d] = len;
+   rope_tables_check("export_rope_rows", "cache", cache.dtype, cache.device, D, len, pos0, cs, sn,
+                     numel_of(out_shape) > 0, t);
++  preflight_out_bound("export_rope_rows", out_shape, cache.dtype, t);  // BWD-F3 E4 (cannot fire: len <= old_seq)
+   return d;
+ }
+ 
+diff --git a/tensor_cuda/src/ops.cpp b/tensor_cuda/src/ops.cpp
+index d207a6cc9..3da30373c 100644
+--- a/tensor_cuda/src/ops.cpp
++++ b/tensor_cuda/src/ops.cpp
+@@ -1054,9 +1054,14 @@ Tensor sum(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+ }
+ Tensor mean(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
+   int64_t cnt = 1;
+-  int nd = a.ndim();
++  // BWD-F3 E3 (review BWDF1R2-F06 and its successor "mean computes unchecked geometry"): the axes are normalized,
++  // range-checked and refused when repeated (NumPy's rule, tc::normalize_reduce_axes) before the count below reads
++  // a.shape()[d]. Before, mean([5]) on a rank-1 tensor read the shape vector past its end, and mean([0, 0]) counted
++  // the axis twice, before sum's own checks ran. Valid, distinct axes give the same normalized values, so the count
++  // and the result are unchanged. Prior art: NumPy's normalize_axis_tuple ("duplicate value in axis").
++  const std::vector<int> nax = tc::normalize_reduce_axes("mean", axes, a.shape());
+   if (axes.empty()) cnt = a.data().numel();
+-  else for (int ax : axes) { int d = ax < 0 ? ax + nd : ax; cnt *= a.shape()[d]; }
++  else for (int d : nax) cnt *= a.shape()[d];
+   return mul_scalar(sum(a, axes, keepdim), 1.0 / (double)cnt);
+ }
+ 

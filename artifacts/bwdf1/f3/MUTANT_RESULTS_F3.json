@@ -1,0 +1,130 @@
+{
+ "cuda_visible_devices": "",
+ "mutants": {
+  "p01_empty_span_refused": {
+   "ruling": "E1",
+   "where": "CPU",
+   "module_sha256": "0a6c8ab9b73da3629a004926806dcbab5368a7cab0e9acb13832571563d07207",
+   "assertion": "verdict(row, r) is None: the row expects the empty call to return (shape [0, 2, 2] / [0, 2, 2] / a tuple) with 0 CUDA calls; the mutant checks the span on every call and refuses with '<op>: position past table end' naming 'sin [1, 2]' (the mutated condition's own text)",
+   "staged_gpu_kills": [],
+   "pytest_exit": 1,
+   "killing_tests": {
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-rope_apply-empty-short-sin]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('e1-rope_apply-empty-short-sin', 'raised RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0)')\nassert 'raised RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0)' is None"
+    },
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-export_rope_rows-empty-short-sin]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('e1-export_rope_rows-empty-short-sin', 'raised RuntimeError: export_rope_rows: position past table end (operand 0 cac...n cuda:0, operand 1 cos [2, 2] float32 on cpu, operand 2 sin [1, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0)')\nassert 'raised RuntimeError: export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [2, 2] float32 on cpu, operand 2 sin [1, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0)' is None"
+    },
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-swap-empty-short-sin]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('e1-swap-empty-short-sin', 'raised RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) [pair 0 of 1]')\nassert 'raised RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) [pair 0 of 1]' is None"
+    }
+   },
+   "all_failing_tests": [
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-arena-empty-short-sin]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-export_rope_rows-empty-short-sin]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-export_row_pair-empty-short-sin]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-export_row_pairs-empty-short-sin]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-rope_apply-empty-negative-pos0]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-rope_apply-empty-short-cos]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-rope_apply-empty-short-sin]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-rope_apply-zero-D]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-swap-empty-short-sin]"
+   ],
+   "result": "KILLED"
+  },
+  "p02_trailing_singleton_table_refused": {
+   "ruling": "E2",
+   "where": "CPU",
+   "module_sha256": "786b33442911b12e522b4a9d4725d16b081a67e975d7c5467a8acaf44a027398",
+   "assertion": "verdict(row, r) is None: the rows expect a [T, D, 1] (or [T, D, 1, 1]) table to be accepted (the reading rope_apply reaches 'CUDA error at rope_apply'; the empty calls return their shapes); the mutant refuses with '<op>: tables must be (T, D)'",
+   "staged_gpu_kills": [],
+   "pytest_exit": 1,
+   "killing_tests": {
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e2-rope_apply-sin-T-D-1]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('e2-rope_apply-sin-T-D-1', 'did not reach the device step: RuntimeError: rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 2, 1] float32 on cpu, pos0 0)')\nassert 'did not reach the device step: RuntimeError: rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 2, 1] float32 on cpu, pos0 0)' is None"
+    },
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e2-rope_apply-cos-T-D-1-1-empty]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('e2-rope_apply-cos-T-D-1-1-empty', 'raised RuntimeError: rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2, 1, 1] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0)')\nassert 'raised RuntimeError: rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2, 1, 1] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0)' is None"
+    },
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e2-export_rope_rows-sin-T-D-1-empty]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('e2-export_rope_rows-sin-T-D-1-empty', 'raised RuntimeError: export_rope_rows: tables must be (T, D) (operand 0 cache...uda:0, operand 1 cos [8, 2] float32 on cpu, operand 2 sin [8, 2, 1] float32 on cpu, dim 1, start 0, length 1, pos0 0)')\nassert 'raised RuntimeError: export_rope_rows: tables must be (T, D) (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [8, 2] float32 on cpu, operand 2 sin [8, 2, 1] float32 on cpu, dim 1, start 0, length 1, pos0 0)' is None"
+    }
+   },
+   "all_failing_tests": [
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e2-export_rope_rows-sin-T-D-1-empty]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e2-rope_apply-cos-T-D-1-1-empty]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e2-rope_apply-sin-T-D-1]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e2-swap-sin-T-D-1-empty]"
+   ],
+   "result": "KILLED"
+  },
+  "p03_duplicate_axis_accepted": {
+   "ruling": "E3",
+   "where": "CPU",
+   "module_sha256": "2c4326973fd70eb855288c555572351c6945e0fc0b44edb18c0e61ca0a50ac9b",
+   "assertion": "verdict(row, r) is None: the rows expect ValueError '<op>: duplicate value in axis' with 0 CUDA calls; the mutant accepts the repeated axis (sum([0, 0]) on [2] reaches the kernel: 'CUDA error at reduce_lastdim'; mean counts the axis twice and reaches the kernel; the empty sum returns [0])",
+   "staged_gpu_kills": [],
+   "pytest_exit": 1,
+   "killing_tests": {
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-sum-duplicate]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('e3-sum-duplicate', 'raised RuntimeError (want ValueError): CUDA error at reduce_lastdim: no CUDA-capable device is detected')\nassert 'raised RuntimeError (want ValueError): CUDA error at reduce_lastdim: no CUDA-capable device is detected' is None"
+    },
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-mean-duplicate]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('e3-mean-duplicate', 'raised RuntimeError (want ValueError): CUDA error at reduce: no CUDA-capable device is detected')\nassert 'raised RuntimeError (want ValueError): CUDA error at reduce: no CUDA-capable device is detected' is None"
+    },
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-sum-empty-duplicate]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('e3-sum-empty-duplicate', 'raised None (want ValueError): None')\nassert 'raised None (want ValueError): None' is None"
+    }
+   },
+   "all_failing_tests": [
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-max-duplicate]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-mean-duplicate]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-prod-duplicate]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-std-duplicate]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-sum-duplicate]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-sum-empty-duplicate]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-sum-negative-duplicate]"
+   ],
+   "result": "KILLED"
+  },
+  "p04_splice_bound_after_work": {
+   "ruling": "E4",
+   "where": "CPU, and the staged GPU line p2_count_p04_splice_bound_after_work (the ordering needs a first pair that allocates and launches, which needs a device)",
+   "module_sha256": "3d6d954b69a6ba6df7d6234d5a8e70aa7f49e551309b01f7c101a5c812de281c",
+   "assertion": "CPU: verdict(row, r) is None: the rows expect OverflowError 'splice_rows: the output NDArray: byte size overflows int64' (and '[pair 1 of 2]' for the pair ops) from the preflight; the mutant's refusal is the constructor's bare text with no pair named. GPU: the count row expects the refusal with 0 allocations, launches and copies during the call; the mutant runs pair 0 (allocates and launches) before pair 1's constructor refuses",
+   "staged_gpu_kills": [
+    "scripts/bwdf3_step_p2.py count row e4-swap-pair1-bound-after-work (GPU, staged)"
+   ],
+   "pytest_exit": 1,
+   "killing_tests": {
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e4-splice-byte-bound]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('e4-splice-byte-bound', \"message lacks 'splice_rows: the output NDArray: byte size overflows int64': NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)\")\nassert \"message lacks 'splice_rows: the output NDArray: byte size overflows int64': NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)\" is None"
+    },
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e4-swap-pair1-byte-bound]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('e4-swap-pair1-byte-bound', \"message lacks 'splice_rows: the output NDArray: byte size overflows int64': NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)\")\nassert \"message lacks 'splice_rows: the output NDArray: byte size overflows int64': NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)\" is None"
+    },
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e4-arena-layer1-byte-bound]": {
+     "outcome": "failed",
+     "message": "AssertionError: ('e4-arena-layer1-byte-bound', \"message lacks 'splice_rows: the output NDArray: byte size overflows int64': NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)\")\nassert \"message lacks 'splice_rows: the output NDArray: byte size overflows int64': NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)\" is None"
+    }
+   },
+   "all_failing_tests": [
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e4-arena-layer1-byte-bound]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e4-splice-byte-bound]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e4-swap-pair1-byte-bound]"
+   ],
+   "result": "KILLED"
+  }
+ }
+}

@@ -1,0 +1,3016 @@
+{
+ "cuda_visible_devices": "",
+ "arms": {
+  "F2": {
+   "pkg_parent": "tensor_cuda/build-bwdf1/F2/pkg",
+   "module_sha256": "5ff79dee0336e47171f193c6b1c9a69bbe5512cd1a03b0456328e1ae981eff4a",
+   "control_calls": 4,
+   "child_exits_nonzero": {
+    "e3-sum-negative-out-of-range": -6,
+    "e3-sum-rank0-axis": -11,
+    "e3-mean-out-of-range": -11,
+    "e3-var-out-of-range": -6,
+    "e3-softmax-out-of-range": -6
+   }
+  },
+  "F3": {
+   "pkg_parent": "tensor_cuda/build-bwdf1/F3/pkg",
+   "module_sha256": "36d023b3ce2b474907f1fd33c2e1b0906e2048314c7e59abdf4711ff351a04fb",
+   "control_calls": 4,
+   "child_exits_nonzero": {}
+  },
+  "B": {
+   "pkg_parent": "tensor_cuda/build-bwdf1/B/pkg",
+   "module_sha256": "70cd17528077d2bbfc2875ec5059213cd56f897985520c30c022c8bba0e10b45",
+   "control_calls": 4,
+   "child_exits_nonzero": {
+    "e3-sum-negative-out-of-range": -6,
+    "e3-sum-rank0-axis": -11,
+    "e3-mean-out-of-range": -6,
+    "e3-softmax-out-of-range": -6
+   }
+  }
+ },
+ "rows": [
+  {
+   "id": "e1-rope_apply-empty-short-sin",
+   "class": "E1",
+   "kind": "accept",
+   "setup": "x=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect": [
+    0,
+    2,
+    2
+   ],
+   "flags": {},
+   "build_F2_expected": "refuses 'position past table end' (the review's case)",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0)"
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      2,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      2,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e1-rope_apply-empty-short-cos",
+   "class": "E1",
+   "kind": "accept",
+   "setup": "x=C((0,2,2)); cs=H((1,2)); sn=H((2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect": [
+    0,
+    2,
+    2
+   ],
+   "flags": {},
+   "build_F2_expected": "refuses 'position past table end'",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [1, 2] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [1, 2] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0)"
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      2,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: position past table end",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: rope_apply: position past table end"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e1-rope_apply-empty-negative-pos0",
+   "class": "E1",
+   "kind": "accept",
+   "setup": "x=C((0,2,2)); cs=H((4,2)); sn=H((4,2))",
+   "call": "tc.rope_apply(x, cs, sn, -1)",
+   "expect": [
+    0,
+    2,
+    2
+   ],
+   "flags": {},
+   "build_F2_expected": "refuses 'position past table end'",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [4, 2] float32 on cpu, sin [4, 2] float32 on cpu, pos0 -1)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [4, 2] float32 on cpu, sin [4, 2] float32 on cpu, pos0 -1)"
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      2,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      2,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e1-rope_apply-zero-D",
+   "class": "E1",
+   "kind": "accept",
+   "setup": "x=C((2,3,0)); cs=H((1,0)); sn=H((1,0))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect": [
+    2,
+    3,
+    0
+   ],
+   "flags": {},
+   "build_F2_expected": "refuses 'position past table end' (L 3 > 1 row)",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: position past table end (x [2, 3, 0] float32 on cuda:0, cos [1, 0] float32 on cpu, sin [1, 0] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: rope_apply: position past table end (x [2, 3, 0] float32 on cuda:0, cos [1, 0] float32 on cpu, sin [1, 0] float32 on cpu, pos0 0)"
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": [
+      2,
+      3,
+      0
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: position past table end",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: rope_apply: position past table end"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e1-export_rope_rows-empty-short-sin",
+   "class": "E1",
+   "kind": "accept",
+   "setup": "c=C((0,4,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.export_rope_rows(c, cs, sn, 1, 0, 2, 0)",
+   "expect": [
+    0,
+    2,
+    2
+   ],
+   "flags": {
+    "no_grad": 1
+   },
+   "build_F2_expected": "refuses 'position past table end'",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [2, 2] float32 on cpu, operand 2 sin [1, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [2, 2] float32 on cpu, operand 2 sin [1, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0)"
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      2,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      2,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e1-export_row_pair-empty-short-sin",
+   "class": "E1",
+   "kind": "accept",
+   "setup": "r=C((0,4,2)); p=C((0,4,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.export_row_pair(r, p, cs, sn, 1, 1, 0, 0, 2, 0)",
+   "expect": "tuple",
+   "flags": {
+    "no_grad": 1
+   },
+   "build_F2_expected": "refuses 'position past table end'",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [2, 2] float32 on cpu, operand 2 sin [1, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [2, 2] float32 on cpu, operand 2 sin [1, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0)"
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": "tuple",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": "tuple",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e1-export_row_pairs-empty-short-sin",
+   "class": "E1",
+   "kind": "accept",
+   "setup": "r0=C((0,4,2)); p0=C((0,4,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.export_row_pairs([r0], [p0], cs, sn, 1, 1, [0], [0], 2, 0)",
+   "expect": "tuple",
+   "flags": {
+    "no_grad": 1
+   },
+   "build_F2_expected": "refuses 'position past table end' [pair 0 of 1]",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [2, 2] float32 on cpu, operand 2 sin [1, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0) [pair 0 of 1]",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: export_rope_rows: position past table end (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [2, 2] float32 on cpu, operand 2 sin [1, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0) [pair 0 of 1]"
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": "tuple",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": "tuple",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e1-swap-empty-short-sin",
+   "class": "E1",
+   "kind": "accept",
+   "setup": "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   "expect": "tuple",
+   "flags": {
+    "no_grad": 1
+   },
+   "build_F2_expected": "refuses 'position past table end' [pair 0 of 1]",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) [pair 0 of 1]",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) [pair 0 of 1]"
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": "tuple",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": "tuple",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e1-arena-empty-short-sin",
+   "class": "E1",
+   "kind": "accept",
+   "setup": "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.arena_row_pair_transaction([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 4)",
+   "expect": "tuple",
+   "flags": {
+    "no_grad": 1
+   },
+   "build_F2_expected": "refuses 'position past table end' (through the swap preflight)",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) [pair 0 of 1]",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: rope_apply: position past table end (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0) [pair 0 of 1]"
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": "tuple",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": "tuple",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e1c-rope_apply-reading-short-sin",
+   "class": "E1 control",
+   "kind": "refuse",
+   "setup": "x=H((1,2,2)); cs=H((2,2)); sn=H((1,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect": [
+    "rope_apply: position past table end",
+    "sin [1, 2]"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: position past table end (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: position past table end (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [1, 2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "message lacks 'rope_apply: position past table end': CUDA error at rope_apply: no CUDA-capable device is detected"
+   },
+   "bar": "holds on F2 and F3",
+   "pass": true
+  },
+  {
+   "id": "e1c-rope_apply-reading-negative-pos0",
+   "class": "E1 control",
+   "kind": "refuse",
+   "setup": "x=H((1,2,2)); cs=H((4,2)); sn=H((4,2))",
+   "call": "tc.rope_apply(x, cs, sn, -1)",
+   "expect": [
+    "rope_apply: position past table end",
+    "pos0 -1"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: position past table end (x [1, 2, 2] float32 on cpu, cos [4, 2] float32 on cpu, sin [4, 2] float32 on cpu, pos0 -1)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: position past table end (x [1, 2, 2] float32 on cpu, cos [4, 2] float32 on cpu, sin [4, 2] float32 on cpu, pos0 -1)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "message lacks 'rope_apply: position past table end': CUDA error at rope_apply: no CUDA-capable device is detected"
+   },
+   "bar": "holds on F2 and F3",
+   "pass": true
+  },
+  {
+   "id": "e1c-rope_apply-reading-covering",
+   "class": "E1 control",
+   "kind": "preflight",
+   "setup": "x=H((1,2,2)); cs=H((2,2)); sn=H((2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect": [
+    "CUDA error at rope_apply"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "holds on F2 and F3",
+   "pass": true
+  },
+  {
+   "id": "e2-rope_apply-sin-T-D-1",
+   "class": "E2",
+   "kind": "preflight",
+   "setup": "x=H((1,2,2)); cs=H((2,2)); sn=H((2,2,1))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect": [
+    "CUDA error at rope_apply"
+   ],
+   "flags": {},
+   "build_F2_expected": "refuses 'tables must be (T, D)' (the review's case; Build B computes it)",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 2, 1] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "did not reach the device step: RuntimeError: rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 2, 1] float32 on cpu, pos0 0)"
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at rope_apply: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e2-rope_apply-cos-T-D-1-1-empty",
+   "class": "E2",
+   "kind": "accept",
+   "setup": "x=C((0,2,2)); cs=H((2,2,1,1)); sn=H((2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect": [
+    0,
+    2,
+    2
+   ],
+   "flags": {},
+   "build_F2_expected": "refuses 'tables must be (T, D)'",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2, 1, 1] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2, 1, 1] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0)"
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      2,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: rope_apply: tables must be (T, D)"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e2-export_rope_rows-sin-T-D-1-empty",
+   "class": "E2",
+   "kind": "accept",
+   "setup": "c=C((0,4,2)); cs=H((8,2)); sn=H((8,2,1))",
+   "call": "tc.export_rope_rows(c, cs, sn, 1, 0, 1, 0)",
+   "expect": [
+    0,
+    1,
+    2
+   ],
+   "flags": {
+    "no_grad": 1
+   },
+   "build_F2_expected": "refuses 'tables must be (T, D)'",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "export_rope_rows: tables must be (T, D) (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [8, 2] float32 on cpu, operand 2 sin [8, 2, 1] float32 on cpu, dim 1, start 0, length 1, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: export_rope_rows: tables must be (T, D) (operand 0 cache [0, 4, 2] float32 on cuda:0, operand 1 cos [8, 2] float32 on cpu, operand 2 sin [8, 2, 1] float32 on cpu, dim 1, start 0, length 1, pos0 0)"
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      1,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      1,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e2-swap-sin-T-D-1-empty",
+   "class": "E2",
+   "kind": "accept",
+   "setup": "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((2,2,1))",
+   "call": "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   "expect": "tuple",
+   "flags": {
+    "no_grad": 1
+   },
+   "build_F2_expected": "refuses 'tables must be (T, D)'",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2, 1] float32 on cpu, pos0 0) [pair 0 of 1]",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised RuntimeError: rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2, 1] float32 on cpu, pos0 0) [pair 0 of 1]"
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": "tuple",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": "tuple",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e2c-sin-trailing-2",
+   "class": "E2 control",
+   "kind": "refuse",
+   "setup": "x=C((0,2,2)); cs=H((2,2)); sn=H((2,2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect": [
+    "rope_apply: tables must be (T, D)",
+    "sin [2, 2, 2]"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2, 2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2, 2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      2,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised None (want RuntimeError): None"
+   },
+   "bar": "holds on F2 and F3",
+   "pass": true
+  },
+  {
+   "id": "e2c-sin-rank1",
+   "class": "E2 control",
+   "kind": "refuse",
+   "setup": "x=C((0,2,2)); cs=H((2,2)); sn=H((2,))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect": [
+    "rope_apply: tables must be (T, D)",
+    "sin [2]"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "message lacks 'sin [2]': rope_apply: tables must be (T, D)"
+   },
+   "bar": "holds on F2 and F3",
+   "pass": true
+  },
+  {
+   "id": "e2c-cos-leading-1",
+   "class": "E2 control",
+   "kind": "refuse",
+   "setup": "x=C((0,2,2)); cs=H((1,2,2)); sn=H((2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect": [
+    "rope_apply: tables must be (T, D)",
+    "cos [1, 2, 2]"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [1, 2, 2] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D) (x [0, 2, 2] float32 on cuda:0, cos [1, 2, 2] float32 on cpu, sin [2, 2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "message lacks 'cos [1, 2, 2]': rope_apply: tables must be (T, D)"
+   },
+   "bar": "holds on F2 and F3",
+   "pass": true
+  },
+  {
+   "id": "e2c-sin-wrong-D",
+   "class": "E2 control",
+   "kind": "refuse",
+   "setup": "x=H((1,2,2)); cs=H((2,2)); sn=H((2,4,1))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect": [
+    "rope_apply: tables must be (T, D)",
+    "sin [2, 4, 1]"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 4, 1] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D) (x [1, 2, 2] float32 on cpu, cos [2, 2] float32 on cpu, sin [2, 4, 1] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: tables must be (T, D)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "message lacks 'sin [2, 4, 1]': rope_apply: tables must be (T, D)"
+   },
+   "bar": "holds on F2 and F3",
+   "pass": true
+  },
+  {
+   "id": "e3-sum-duplicate",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,))",
+   "call": "a.sum([0, 0])",
+   "expect": [
+    "reduce: duplicate value in axis",
+    "axes [0, 0]",
+    "operand [2]"
+   ],
+   "flags": {
+    "raises": "ValueError"
+   },
+   "build_F2_expected": "reaches the kernel with red_size 4 over a 2-element buffer (the review's case)",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want ValueError): CUDA error at reduce_lastdim: no CUDA-capable device is detected"
+   },
+   "F3": {
+    "result": {
+     "raised": "ValueError",
+     "message": "reduce: duplicate value in axis (axes [0, 0], operand [2]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want ValueError): CUDA error at reduce_lastdim: no CUDA-capable device is detected"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-sum-out-of-range",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,))",
+   "call": "a.sum([8])",
+   "expect": [
+    "reduce: axis 8 is out of bounds for array of dimension 1"
+   ],
+   "flags": {
+    "raises": "IndexError"
+   },
+   "build_F2_expected": "writes ReduceSpec::reduced[8] and reads shape[8] (the review's case)",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want IndexError): CUDA error at reduce: no CUDA-capable device is detected"
+   },
+   "F3": {
+    "result": {
+     "raised": "IndexError",
+     "message": "reduce: axis 8 is out of bounds for array of dimension 1 (axes [8], operand [2]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want IndexError): CUDA error at reduce: no CUDA-capable device is detected"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-sum-negative-duplicate",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,3))",
+   "call": "a.sum([1, -1])",
+   "expect": [
+    "reduce: duplicate value in axis",
+    "axes [1, -1]"
+   ],
+   "flags": {
+    "raises": "ValueError"
+   },
+   "build_F2_expected": "reaches the kernel",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want ValueError): CUDA error at reduce_lastdim: no CUDA-capable device is detected"
+   },
+   "F3": {
+    "result": {
+     "raised": "ValueError",
+     "message": "reduce: duplicate value in axis (axes [1, -1], operand [2, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want ValueError): CUDA error at reduce_lastdim: no CUDA-capable device is detected"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-sum-negative-out-of-range",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,3))",
+   "call": "a.sum([-3])",
+   "expect": [
+    "reduce: axis -3 is out of bounds for array of dimension 2"
+   ],
+   "flags": {
+    "raises": "IndexError"
+   },
+   "build_F2_expected": "writes slot -1",
+   "F2": {
+    "result": {
+     "child_crash": -6,
+     "stderr": "free(): invalid pointer\n"
+    },
+    "holds": false,
+    "why": "the process died (exit -6)"
+   },
+   "F3": {
+    "result": {
+     "raised": "IndexError",
+     "message": "reduce: axis -3 is out of bounds for array of dimension 2 (axes [-3], operand [2, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "child_crash": -6,
+     "stderr": "free(): invalid pointer\n"
+    },
+    "holds": false,
+    "why": "the process died (exit -6)"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-sum-rank0-axis",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((1,)).reshape([])",
+   "call": "a.sum([0])",
+   "expect": [
+    "reduce: axis 0 is out of bounds for array of dimension 0"
+   ],
+   "flags": {
+    "raises": "IndexError"
+   },
+   "build_F2_expected": "indexes an empty shape vector",
+   "F2": {
+    "result": {
+     "child_crash": -11,
+     "stderr": ""
+    },
+    "holds": false,
+    "why": "the process died (exit -11)"
+   },
+   "F3": {
+    "result": {
+     "raised": "IndexError",
+     "message": "reduce: axis 0 is out of bounds for array of dimension 0 (axes [0], operand []); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "child_crash": -11,
+     "stderr": ""
+    },
+    "holds": false,
+    "why": "the process died (exit -11)"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-sum-empty-duplicate",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=C((0,3))",
+   "call": "a.sum([1, 1])",
+   "expect": [
+    "reduce: duplicate value in axis"
+   ],
+   "flags": {
+    "raises": "ValueError"
+   },
+   "build_F2_expected": "returns [0] (axis 1 counted twice; the output is empty, so nothing is allocated)",
+   "F2": {
+    "result": {
+     "raised": null,
+     "result": [
+      0
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised None (want ValueError): None"
+   },
+   "F3": {
+    "result": {
+     "raised": "ValueError",
+     "message": "reduce: duplicate value in axis (axes [1, 1], operand [0, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      0
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised None (want ValueError): None"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-mean-duplicate",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,3))",
+   "call": "a.mean([0, 0])",
+   "expect": [
+    "mean: duplicate value in axis",
+    "axes [0, 0]"
+   ],
+   "flags": {
+    "raises": "ValueError"
+   },
+   "build_F2_expected": "counts axis 0 twice, then sums",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want ValueError): CUDA error at reduce: no CUDA-capable device is detected"
+   },
+   "F3": {
+    "result": {
+     "raised": "ValueError",
+     "message": "mean: duplicate value in axis (axes [0, 0], operand [2, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want ValueError): CUDA error at reduce: no CUDA-capable device is detected"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-mean-out-of-range",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,))",
+   "call": "a.mean([5])",
+   "expect": [
+    "mean: axis 5 is out of bounds for array of dimension 1"
+   ],
+   "flags": {
+    "raises": "IndexError"
+   },
+   "build_F2_expected": "reads a.shape()[5] before sum",
+   "F2": {
+    "result": {
+     "child_crash": -11,
+     "stderr": ""
+    },
+    "holds": false,
+    "why": "the process died (exit -11)"
+   },
+   "F3": {
+    "result": {
+     "raised": "IndexError",
+     "message": "mean: axis 5 is out of bounds for array of dimension 1 (axes [5], operand [2]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "child_crash": -6,
+     "stderr": "free(): invalid next size (fast)\n"
+    },
+    "holds": false,
+    "why": "the process died (exit -6)"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-max-duplicate",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,3))",
+   "call": "a.max([1, 1])",
+   "expect": [
+    "reduce: duplicate value in axis"
+   ],
+   "flags": {
+    "raises": "ValueError"
+   },
+   "build_F2_expected": "reaches the kernel",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want ValueError): CUDA error at reduce_lastdim: no CUDA-capable device is detected"
+   },
+   "F3": {
+    "result": {
+     "raised": "ValueError",
+     "message": "reduce: duplicate value in axis (axes [1, 1], operand [2, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want ValueError): CUDA error at reduce_lastdim: no CUDA-capable device is detected"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-min-out-of-range",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,3))",
+   "call": "a.min([2])",
+   "expect": [
+    "reduce: axis 2 is out of bounds for array of dimension 2"
+   ],
+   "flags": {
+    "raises": "IndexError"
+   },
+   "build_F2_expected": "writes slot 2's shape",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want IndexError): CUDA error at reduce: no CUDA-capable device is detected"
+   },
+   "F3": {
+    "result": {
+     "raised": "IndexError",
+     "message": "reduce: axis 2 is out of bounds for array of dimension 2 (axes [2], operand [2, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want IndexError): CUDA error at reduce: no CUDA-capable device is detected"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-prod-duplicate",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,3))",
+   "call": "a.prod([-2, 0])",
+   "expect": [
+    "reduce: duplicate value in axis"
+   ],
+   "flags": {
+    "raises": "ValueError"
+   },
+   "build_F2_expected": "reaches the kernel",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want ValueError): CUDA error at reduce: no CUDA-capable device is detected"
+   },
+   "F3": {
+    "result": {
+     "raised": "ValueError",
+     "message": "reduce: duplicate value in axis (axes [-2, 0], operand [2, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want ValueError): CUDA error at reduce: no CUDA-capable device is detected"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-var-out-of-range",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,3))",
+   "call": "a.var([3])",
+   "expect": [
+    "mean: axis 3 is out of bounds for array of dimension 2"
+   ],
+   "flags": {
+    "raises": "IndexError"
+   },
+   "build_F2_expected": "reads shape[3]",
+   "F2": {
+    "result": {
+     "child_crash": -6,
+     "stderr": "malloc(): invalid size (unsorted)\n"
+    },
+    "holds": false,
+    "why": "the process died (exit -6)"
+   },
+   "F3": {
+    "result": {
+     "raised": "IndexError",
+     "message": "mean: axis 3 is out of bounds for array of dimension 2 (axes [3], operand [2, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want IndexError): CUDA error at reduce: no CUDA-capable device is detected"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-std-duplicate",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,3))",
+   "call": "a.std([1, 1])",
+   "expect": [
+    "mean: duplicate value in axis"
+   ],
+   "flags": {
+    "raises": "ValueError"
+   },
+   "build_F2_expected": "reaches the kernel",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want ValueError): CUDA error at reduce_lastdim: no CUDA-capable device is detected"
+   },
+   "F3": {
+    "result": {
+     "raised": "ValueError",
+     "message": "mean: duplicate value in axis (axes [1, 1], operand [2, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want ValueError): CUDA error at reduce_lastdim: no CUDA-capable device is detected"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-softmax-out-of-range",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,3))",
+   "call": "a.softmax(-3)",
+   "expect": [
+    "reduce: axis -3 is out of bounds for array of dimension 2"
+   ],
+   "flags": {
+    "raises": "IndexError"
+   },
+   "build_F2_expected": "writes keep_shape[-1] (the process can die)",
+   "F2": {
+    "result": {
+     "child_crash": -6,
+     "stderr": "free(): invalid pointer\n"
+    },
+    "holds": false,
+    "why": "the process died (exit -6)"
+   },
+   "F3": {
+    "result": {
+     "raised": "IndexError",
+     "message": "reduce: axis -3 is out of bounds for array of dimension 2 (axes [-3], operand [2, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "child_crash": -6,
+     "stderr": "free(): invalid pointer\n"
+    },
+    "holds": false,
+    "why": "the process died (exit -6)"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-log_softmax-out-of-range",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,3))",
+   "call": "a.log_softmax(2)",
+   "expect": [
+    "reduce: axis 2 is out of bounds for array of dimension 2"
+   ],
+   "flags": {
+    "raises": "IndexError"
+   },
+   "build_F2_expected": "writes slot 2",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want IndexError): CUDA error at reduce: no CUDA-capable device is detected"
+   },
+   "F3": {
+    "result": {
+     "raised": "IndexError",
+     "message": "reduce: axis 2 is out of bounds for array of dimension 2 (axes [2], operand [2, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want IndexError): CUDA error at reduce: no CUDA-capable device is detected"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-argmax-out-of-range",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,3))",
+   "call": "a.argmax(2)",
+   "expect": [
+    "argmax: axis 2 is out of bounds for array of dimension 2"
+   ],
+   "flags": {
+    "raises": "IndexError"
+   },
+   "build_F2_expected": "reads shape[2] in axis_split",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at arg: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want IndexError): CUDA error at arg: no CUDA-capable device is detected"
+   },
+   "F3": {
+    "result": {
+     "raised": "IndexError",
+     "message": "argmax: axis 2 is out of bounds for array of dimension 2 (axes [2], operand [2, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at arg: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want IndexError): CUDA error at arg: no CUDA-capable device is detected"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3-argmin-out-of-range",
+   "class": "E3",
+   "kind": "refuse",
+   "setup": "a=H((2,3))",
+   "call": "a.argmin(-3)",
+   "expect": [
+    "argmin: axis -3 is out of bounds for array of dimension 2"
+   ],
+   "flags": {
+    "raises": "IndexError"
+   },
+   "build_F2_expected": "reads shape[-1]",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at arg: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want IndexError): CUDA error at arg: no CUDA-capable device is detected"
+   },
+   "F3": {
+    "result": {
+     "raised": "IndexError",
+     "message": "argmin: axis -3 is out of bounds for array of dimension 2 (axes [-3], operand [2, 3]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at arg: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "raised RuntimeError (want IndexError): CUDA error at arg: no CUDA-capable device is detected"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e3c-sum-valid-negative",
+   "class": "E3 control",
+   "kind": "preflight",
+   "setup": "a=H((2,3))",
+   "call": "a.sum([-1])",
+   "expect": [
+    "CUDA error at reduce_lastdim"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "holds on F2 and F3",
+   "pass": true
+  },
+  {
+   "id": "e3c-sum-two-distinct",
+   "class": "E3 control",
+   "kind": "preflight",
+   "setup": "a=H((2,3,4))",
+   "call": "a.sum([2, 0])",
+   "expect": [
+    "CUDA error at reduce"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "holds on F2 and F3",
+   "pass": true
+  },
+  {
+   "id": "e3c-mean-valid",
+   "class": "E3 control",
+   "kind": "preflight",
+   "setup": "a=H((2,3))",
+   "call": "a.mean([0, 1])",
+   "expect": [
+    "CUDA error at reduce_lastdim"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "holds on F2 and F3",
+   "pass": true
+  },
+  {
+   "id": "e3c-argmax-valid",
+   "class": "E3 control",
+   "kind": "preflight",
+   "setup": "a=H((2,3))",
+   "call": "a.argmax(-1)",
+   "expect": [
+    "CUDA error at arg"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at arg: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at arg: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at arg: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "holds on F2 and F3",
+   "pass": true
+  },
+  {
+   "id": "e4-splice-byte-bound",
+   "class": "E4",
+   "kind": "refuse",
+   "setup": "o=C((0,2305843009213693952,2),'uint8'); i=C((0,2305843009213693952,2),'uint8')",
+   "call": "tc.splice_rows(o, i, 1, 0, 0)",
+   "expect": [
+    "splice_rows: the output NDArray: byte size overflows int64",
+    "[0, 4611686018427387904, 2]",
+    "operand 0 old_cache [0, 2305843009213693952, 2]"
+   ],
+   "flags": {
+    "raises": "OverflowError",
+    "no_grad": 1
+   },
+   "build_F2_expected": "the constructor refuses it with its bare text, after the check",
+   "F2": {
+    "result": {
+     "raised": "OverflowError",
+     "message": "NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "message lacks 'splice_rows: the output NDArray: byte size overflows int64': NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)"
+   },
+   "F3": {
+    "result": {
+     "raised": "OverflowError",
+     "message": "splice_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 old_cache [0, 2305843009213693952, 2] uint8 on cuda:0, operand 1 insert [0, 2305843009213693952, 2] uint8 on cuda:0, dim 1, head 0, tail_start 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "OverflowError",
+     "message": "NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "message lacks 'splice_rows: the output NDArray: byte size overflows int64': NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e4-swap-pair1-byte-bound",
+   "class": "E4",
+   "kind": "refuse",
+   "setup": "r0=C((0,4,2),'uint8'); i0=C((0,1,2),'uint8'); r1=C((0,2305843009213693952,2),'uint8'); i1=C((0,2305843009213693952,2),'uint8'); p0=C((0,4,0)); p1=C((0,4,0)); j0=C((0,1,0)); j1=C((0,1,0)); cs=C((1,0)); sn=C((1,0))",
+   "call": "tc.swap_row_pairs_with_rope([r0, r1], [p0, p1], [i0, i1], [j0, j1], cs, sn, 1, 1, 0, 0, 0)",
+   "expect": [
+    "splice_rows: the output NDArray: byte size overflows int64",
+    "[pair 1 of 2]"
+   ],
+   "flags": {
+    "raises": "OverflowError",
+    "no_grad": 1
+   },
+   "build_F2_expected": "runs pair 0, then pair 1's constructor refuses (no pair named; the review's case)",
+   "F2": {
+    "result": {
+     "raised": "OverflowError",
+     "message": "NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "message lacks 'splice_rows: the output NDArray: byte size overflows int64': NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)"
+   },
+   "F3": {
+    "result": {
+     "raised": "OverflowError",
+     "message": "splice_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 old_cache [0, 2305843009213693952, 2] uint8 on cuda:0, operand 1 insert [0, 2305843009213693952, 2] uint8 on cuda:0, dim 1, head 0, tail_start 0) [pair 1 of 2]",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "OverflowError",
+     "message": "NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "message lacks 'splice_rows: the output NDArray: byte size overflows int64': NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e4-arena-layer1-byte-bound",
+   "class": "E4",
+   "kind": "refuse",
+   "setup": "r0=C((0,4,2),'uint8'); r1=C((0,2305843009213693952,2),'uint8'); p0=C((0,4,0),'uint8'); p1=C((0,4,0),'uint8'); i0=C((0,2305843009213693952,2),'uint8'); i1=C((0,2305843009213693952,2),'uint8'); j0=C((0,2305843009213693952,0),'uint8'); j1=C((0,2305843009213693952,0),'uint8'); cs=C((2305843009213693952,0),'uint8'); sn=C((2305843009213693952,0),'uint8')",
+   "call": "tc.arena_row_pair_transaction([r0, r1], [p0, p1], [i0, i1], [j0, j1], cs, sn, 1, 1, 0, 0, 2305843009213693952)",
+   "expect": [
+    "splice_rows: the output NDArray: byte size overflows int64",
+    "[pair 1 of 2]"
+   ],
+   "flags": {
+    "raises": "OverflowError",
+    "no_grad": 1
+   },
+   "build_F2_expected": "runs layer 0, then layer 1's constructor refuses",
+   "F2": {
+    "result": {
+     "raised": "OverflowError",
+     "message": "NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "message lacks 'splice_rows: the output NDArray: byte size overflows int64': NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)"
+   },
+   "F3": {
+    "result": {
+     "raised": "OverflowError",
+     "message": "splice_rows: the output NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero) (operand 0 old_cache [0, 2305843009213693952, 2] uint8 on cuda:0, operand 1 insert [0, 2305843009213693952, 2] uint8 on cuda:0, dim 1, head 0, tail_start 0) [pair 1 of 2]",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "OverflowError",
+     "message": "NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "message lacks 'splice_rows: the output NDArray: byte size overflows int64': NDArray: byte size overflows int64 for shape [0, 4611686018427387904, 2] and dtype uint8 (nonzero extents count next to zero)"
+   },
+   "bar": "fails on F2, holds on F3",
+   "pass": true
+  },
+  {
+   "id": "e4c-splice-fits",
+   "class": "E4 control",
+   "kind": "accept",
+   "setup": "o=C((0,2305843009213693952,2),'uint8'); i=C((0,1,2),'uint8')",
+   "call": "tc.splice_rows(o, i, 1, 0, 0)",
+   "expect": [
+    0,
+    2305843009213693953,
+    2
+   ],
+   "flags": {
+    "no_grad": 1
+   },
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      2305843009213693953,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      2305843009213693953,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      0,
+      2305843009213693953,
+      2
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "bar": "holds on F2 and F3",
+   "pass": true
+  },
+  {
+   "id": "d1-where-empty-mixed-dtype",
+   "class": "D1 (F05)",
+   "kind": "refuse",
+   "setup": "c=C((0,)); x=C((0,)); y=C((0,),'float16')",
+   "call": "tc.where(c, x, y)",
+   "expect": [
+    "where: x has dtype float32 but y has float16"
+   ],
+   "flags": {},
+   "build_F2_expected": "returns [0] (Build B's empty no-op)",
+   "F2": {
+    "result": {
+     "raised": null,
+     "result": [
+      0
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised None (want RuntimeError): None"
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "where: x has dtype float32 but y has float16; the data operands must match (cond [0] float32, x [0] float32, y [0] float16); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      0
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised None (want RuntimeError): None"
+   },
+   "bar": "domain refusal: holds on F3 (F2 and B recorded)",
+   "pass": true,
+   "label": "domain refusal"
+  },
+  {
+   "id": "d1-where-all-true-mixed-dtype",
+   "class": "D1 (F05)",
+   "kind": "refuse",
+   "setup": "c=H((2,)); x=H((2,)); y=H((2,),'float16')",
+   "call": "tc.where(c, x, y)",
+   "expect": [
+    "where: x has dtype float32 but y has float16"
+   ],
+   "flags": {},
+   "build_F2_expected": "same (the review's case)",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "where: x has dtype float32 but y has float16; the data operands must match (cond [2] float32, x [2] float32, y [2] float16); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "where: x has dtype float32 but y has float16; the data operands must match (cond [2] float32, x [2] float32, y [2] float16); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "CUDA error at where: no CUDA-capable device is detected",
+     "calls": 5,
+     "by_function": {
+      "cudaGetErrorString": 1,
+      "cudaGetLastError": 1,
+      "cudaLaunchKernel": 1,
+      "__cudaPopCallConfiguration": 1,
+      "__cudaPushCallConfiguration": 1
+     }
+    },
+    "holds": false,
+    "why": "message lacks 'where: x has dtype float32 but y has float16': CUDA error at where: no CUDA-capable device is detected"
+   },
+   "bar": "domain refusal: holds on F3 (F2 and B recorded)",
+   "pass": true,
+   "label": "domain refusal"
+  },
+  {
+   "id": "d1-rank9-binary-empty",
+   "class": "D1 (F04)",
+   "kind": "refuse",
+   "setup": "a=C((0,)).reshape([1]*8+[0]); b=C((0,)).reshape([1]*8+[0])",
+   "call": "a + b",
+   "expect": [
+    "ew_binary: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "flags": {},
+   "build_F2_expected": "same (the review's case)",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "ew_binary: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "ew_binary: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised None (want RuntimeError): None"
+   },
+   "bar": "domain refusal: holds on F3 (F2 and B recorded)",
+   "pass": true,
+   "label": "domain refusal"
+  },
+  {
+   "id": "d1-rank9-compare-empty",
+   "class": "D1 (F04)",
+   "kind": "refuse",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "a.gt(a)",
+   "expect": [
+    "compare: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "compare: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "compare: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand a [1, 1, 1, 1, 1, 1, 1, 1, 0], operand b [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised None (want RuntimeError): None"
+   },
+   "bar": "domain refusal: holds on F3 (F2 and B recorded)",
+   "pass": true,
+   "label": "domain refusal"
+  },
+  {
+   "id": "d1-rank9-where-empty",
+   "class": "D1 (F04)",
+   "kind": "refuse",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "tc.where(a, a, a)",
+   "expect": [
+    "where: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "where: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (cond [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, x [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, y [1, 1, 1, 1, 1, 1, 1, 1, 0] float32); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "where: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (cond [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, x [1, 1, 1, 1, 1, 1, 1, 1, 0] float32, y [1, 1, 1, 1, 1, 1, 1, 1, 0] float32); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised None (want RuntimeError): None"
+   },
+   "bar": "domain refusal: holds on F3 (F2 and B recorded)",
+   "pass": true,
+   "label": "domain refusal"
+  },
+  {
+   "id": "d1-rank9-expand-empty",
+   "class": "D1 (F04)",
+   "kind": "refuse",
+   "setup": "a=C((0,))",
+   "call": "a.expand([1]*8+[0])",
+   "expect": [
+    "broadcast_to: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "broadcast_to: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (target [1, 1, 1, 1, 1, 1, 1, 1, 0], operand [0]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "broadcast_to: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (target [1, 1, 1, 1, 1, 1, 1, 1, 0], operand [0]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised None (want RuntimeError): None"
+   },
+   "bar": "domain refusal: holds on F3 (F2 and B recorded)",
+   "pass": true,
+   "label": "domain refusal"
+  },
+  {
+   "id": "d1-rank9-masked_fill-empty",
+   "class": "D1 (F04)",
+   "kind": "refuse",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "a.masked_fill(a, 0.0)",
+   "expect": [
+    "masked_fill: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "masked_fill: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (mask [1, 1, 1, 1, 1, 1, 1, 1, 0], a [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "masked_fill: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (mask [1, 1, 1, 1, 1, 1, 1, 1, 0], a [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+     ],
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "raised None (want RuntimeError): None"
+   },
+   "bar": "domain refusal: holds on F3 (F2 and B recorded)",
+   "pass": true,
+   "label": "domain refusal"
+  },
+  {
+   "id": "d1-rank9-axpy-empty",
+   "class": "D1 (F04)",
+   "kind": "refuse",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "tc._C.axpy_(a, a, 1.0)",
+   "expect": [
+    "axpy_: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "axpy_: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (param [1, 1, 1, 1, 1, 1, 1, 1, 0], other [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "axpy_: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (param [1, 1, 1, 1, 1, 1, 1, 1, 0], other [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": null,
+     "calls": 1,
+     "by_function": {
+      "cudaMemcpy": 1
+     }
+    },
+    "holds": false,
+    "why": "raised None (want RuntimeError): None"
+   },
+   "bar": "domain refusal: holds on F3 (F2 and B recorded)",
+   "pass": true,
+   "label": "domain refusal"
+  },
+  {
+   "id": "d1-rank9-sum-empty",
+   "class": "D1 (F04)",
+   "kind": "refuse",
+   "setup": "a=C((0,)).reshape([1]*8+[0])",
+   "call": "a.sum()",
+   "expect": [
+    "reduce: rank 9 exceeds TC_MAX_DIMS=8"
+   ],
+   "flags": {},
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "reduce: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "reduce: rank 9 exceeds TC_MAX_DIMS=8, the size of the op's metadata arrays (operand [1, 1, 1, 1, 1, 1, 1, 1, 0]); refused before any allocation",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "cudaMalloc failed: no CUDA-capable device is detected",
+     "calls": 4,
+     "by_function": {
+      "cudaDeviceGetDefaultMemPool": 1,
+      "cudaGetDevice": 1,
+      "cudaGetErrorString": 1,
+      "cudaMalloc": 1
+     }
+    },
+    "holds": false,
+    "why": "message lacks 'reduce: rank 9 exceeds TC_MAX_DIMS=8': cudaMalloc failed: no CUDA-capable device is detected"
+   },
+   "bar": "domain refusal: holds on F3 (F2 and B recorded)",
+   "pass": true,
+   "label": "domain refusal"
+  },
+  {
+   "id": "d1-axpy-empty-destination-shape",
+   "class": "D1 (F03)",
+   "kind": "refuse",
+   "setup": "p=C((0,1)); o=C((0,2))",
+   "call": "tc._C.axpy_(p, o, 1.0)",
+   "expect": [
+    "axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2]",
+    "does not map element for element"
+   ],
+   "flags": {},
+   "build_F2_expected": "same (the review's case; Build B's zero-byte no-op)",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2], which does not map element for element onto param; refused before any launch",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "axpy_: the update of param [0, 1] by other [0, 2] broadcasts to [0, 2], which does not map element for element onto param; refused before any launch",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": null,
+     "result": null,
+     "calls": 1,
+     "by_function": {
+      "cudaMemcpy": 1
+     }
+    },
+    "holds": false,
+    "why": "raised None (want RuntimeError): None"
+   },
+   "bar": "domain refusal: holds on F3 (F2 and B recorded)",
+   "pass": true,
+   "label": "domain refusal"
+  },
+  {
+   "id": "d1-rope-table-dtype-empty",
+   "class": "D1 (F08)",
+   "kind": "refuse",
+   "setup": "x=C((0,2,2)); cs=H((2,2),'float16'); sn=H((2,2))",
+   "call": "tc.rope_apply(x, cs, sn, 0)",
+   "expect": [
+    "rope_apply: table/x dtype mismatch",
+    "cos [2, 2] float16"
+   ],
+   "flags": {},
+   "build_F2_expected": "same (the review's case: no table byte is read)",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float16 on cpu, sin [2, 2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float16 on cpu, sin [2, 2] float32 on cpu, pos0 0)",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: table/x dtype mismatch",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "message lacks 'cos [2, 2] float16': rope_apply: table/x dtype mismatch"
+   },
+   "bar": "domain refusal: holds on F3 (F2 and B recorded)",
+   "pass": true,
+   "label": "domain refusal"
+  },
+  {
+   "id": "d1-rope-table-dtype-swap-empty",
+   "class": "D1 (F08)",
+   "kind": "refuse",
+   "setup": "r0=C((0,2,2)); p0=C((0,2,2)); i0=C((0,2,2)); j0=C((0,2,2)); cs=H((2,2)); sn=H((2,2),'bfloat16')",
+   "call": "tc.swap_row_pairs_with_rope([r0], [p0], [i0], [j0], cs, sn, 1, 1, 0, 0, 0)",
+   "expect": [
+    "rope_apply: table/x dtype mismatch",
+    "[pair 0 of 1]"
+   ],
+   "flags": {
+    "no_grad": 1
+   },
+   "build_F2_expected": "same",
+   "F2": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2] bfloat16 on cpu, pos0 0) [pair 0 of 1]",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "F3": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: table/x dtype mismatch (x [0, 2, 2] float32 on cuda:0, cos [2, 2] float32 on cpu, sin [2, 2] bfloat16 on cpu, pos0 0) [pair 0 of 1]",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": true,
+    "why": null
+   },
+   "B": {
+    "result": {
+     "raised": "RuntimeError",
+     "message": "rope_apply: table/x dtype mismatch",
+     "calls": 0,
+     "by_function": {}
+    },
+    "holds": false,
+    "why": "message lacks '[pair 0 of 1]': rope_apply: table/x dtype mismatch"
+   },
+   "bar": "domain refusal: holds on F3 (F2 and B recorded)",
+   "pass": true,
+   "label": "domain refusal"
+  }
+ ],
+ "summary": {
+  "rows": 57,
+  "fix_rows": 33,
+  "control_rows": 12,
+  "d1_rows": 12,
+  "failing": [],
+  "F3_counter_positive_control_calls": 4,
+  "verdict": "PASS"
+ }
+}

@@ -6,6 +6,7 @@
 #include "tc/core.h"
 
 #include <cuda_runtime.h>
+#include <algorithm>  // BWD-F2: std::max over three ranks
 #include <atomic>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
@@ -104,8 +105,21 @@ void cuda_check_last(const char* where) {
                              cudaGetErrorString(e));
   }
 }
+// ENG5-S (ENG5 S2, ENG5-F1 form): a CUDA call whose failure would let its entry return as if it succeeded checks its
+// own returned status here. Prior art: the CUDA runtime's error model (each API call returns its cudaError_t;
+// cudaGetLastError returns and clears the thread's last error, which can belong to an earlier call -- CUDA Runtime API
+// docs, "Error Handling"); the check-the-return idiom of NVIDIA's samples (checkCudaErrors). Taken: test the returned
+// status at the call. Ours: the message format and never touching the last-error slot here (ENG4-F3).
+void check_cuda_status(int status, const char* entry, const char* call) {
+  if (status == 0) return;
+  const cudaError_t e = static_cast<cudaError_t>(status);
+  throw std::runtime_error(std::string(entry) + ": " + call + " failed: " + cudaGetErrorName(e) + ": " +
+                           cudaGetErrorString(e));
+}
 void cuda_sync() {
-  cudaDeviceSynchronize();
+  // ENG5-S site 1 (ENG5-F1 P4, ENG5-REV1 F10): the synchronize's own returned status is checked (a later
+  // cudaGetLastError reads the thread's slot, which cannot stand in for it); Build B's slot check after it is kept.
+  check_cuda_status(cudaDeviceSynchronize(), "cuda_sync", "cudaDeviceSynchronize");
   cuda_check_last("sync");
 }
 
@@ -182,7 +196,12 @@ Storage::Storage(size_t nbytes_, Device device_) : nbytes(nbytes_), device(devic
       // Near the wall: sync materializes every pending cudaFreeAsync, trim
       // returns all idle pool reservations to the driver, then retry once.
       cudaGetLastError();  // clear sticky error
-      cudaStreamSynchronize(0);
+      // ENG5-S site 2 (ENG5-F1 P4, ENG5-REV1 F10): the drain is result-bearing (the retry relies on every pending free
+      // having been materialized), so its own status is checked and a failed drain raises instead of retrying; the
+      // trim below is cleanup and is not changed.
+      check_cuda_status(cudaStreamSynchronize(0), pooled ? "Storage (cudaMallocAsync OOM retry)"
+                                                         : "Storage (cudaMalloc OOM retry)",
+                        "cudaStreamSynchronize (drain)");
       empty_cache();
       e = pooled ? cudaMallocAsync(&ptr, nbytes, 0) : cudaMalloc(&ptr, nbytes);
     }
@@ -531,8 +550,11 @@ Storage::~Storage() {
 }
 
 // --------------------------------------------------------------------- NDArray
-NDArray::NDArray(const Shape& shape_, DType dtype_, Device device_)
-    : shape(shape_), dtype(dtype_), device(device_) {
+// BWD-F3 E4 (review BWDF1R2-F07): the constructor's byte bound, moved out of the constructor unchanged (same terms,
+// same order, same texts) so the pair preflights can run it on an output shape before any pair's work. The
+// constructor below calls it and allocates what it returns. Prior art: the ENG3-F1 R1 text kept below; the
+// check-then-act split (no specific prior art known to me). Ours: sharing the constructor's own function.
+size_t ndarray_checked_nbytes(const Shape& shape_, DType dtype_) {
   // ENG3-F1 R1: check the byte bound before forming a product or allocating.
   // Count zeros as 1 for the bound (the existing checked_nbytes rule); the
   // actual allocation is zero if any extent is zero. All bytes fit int64,
@@ -561,7 +583,12 @@ NDArray::NDArray(const Shape& shape_, DType dtype_, Device device_)
     }
     bytes *= extent;
   }
-  storage = std::make_shared<Storage>(empty ? 0 : bytes, device_);
+  return empty ? 0 : bytes;
+}
+
+NDArray::NDArray(const Shape& shape_, DType dtype_, Device device_)
+    : shape(shape_), dtype(dtype_), device(device_) {
+  storage = std::make_shared<Storage>(ndarray_checked_nbytes(shape_, dtype_), device_);  // BWD-F3 E4: shared bound
 }
 NDArray NDArray::empty(const Shape& shape, DType dtype, Device device) {
   return NDArray(shape, dtype, device);
@@ -770,7 +797,10 @@ void host_astype_into(const NDArray& src, NDArray& out) {
 NDArray NDArray::zeros(const Shape& shape, DType dtype, Device device) {
   NDArray a(shape, dtype, device);
   if (a.numel() > 0) {
-    if (device.is_cuda()) cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype));
+    // ENG5-S site 3 (ENG5 S2): the fill's own returned status is checked (it was discarded: a failed fill returned
+    // unwritten memory).
+    if (device.is_cuda())
+      check_cuda_status(cudaMemset(a.data_ptr(), 0, a.numel() * dtype_size(dtype)), "NDArray::zeros", "cudaMemset");
     else std::memset(a.data_ptr(), 0, a.numel() * dtype_size(dtype));  // ENG3 E2: host path, no CUDA call
   }
   return a;
@@ -888,7 +918,9 @@ NDArray NDArray::from_host(const void* src, const Shape& shape, DType dtype, Dev
   if (bytes == 0) return a;
   // ENG3 E2 (HOST-TENSOR-NEEDS-DEVICE): the error check belongs to the device copy only; a host copy calls no CUDA API.
   if (device.is_cuda()) {
-    cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice);
+    // ENG5-S site 4 (ENG5-F1 P4, ENG5-REV1 F10): the copy's own returned status is checked; Build B's slot check is
+    // kept after it.
+    check_cuda_status(cudaMemcpy(a.data_ptr(), src, bytes, cudaMemcpyHostToDevice), "NDArray::from_host", "cudaMemcpy");
     cuda_check_last("from_host");
   } else {
     std::memcpy(a.data_ptr(), src, bytes);
@@ -900,7 +932,9 @@ void NDArray::to_host(void* dst) const {
   if (bytes == 0) return;
   // ENG3 E2: as from_host.
   if (device.is_cuda()) {
-    cudaMemcpy(dst, data_ptr(), bytes, cudaMemcpyDeviceToHost);
+    // ENG5-S site 5 (ENG5-F1 P4, ENG5-REV1 F10): the copy's own returned status is checked; Build B's slot check is
+    // kept after it.
+    check_cuda_status(cudaMemcpy(dst, data_ptr(), bytes, cudaMemcpyDeviceToHost), "NDArray::to_host", "cudaMemcpy");
     cuda_check_last("to_host");
   } else {
     std::memcpy(dst, data_ptr(), bytes);
@@ -910,7 +944,11 @@ NDArray NDArray::clone() const {
   NDArray out(shape, dtype, device);
   size_t bytes = numel() * dtype_size(dtype);
   if (bytes) {
-    if (device.is_cuda()) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice);
+    // ENG5-S site 6 (ENG5 S2, CLONE-MEMCPY-UNCHECKED): the copy's own returned status is checked; a failed copy raised
+    // nothing and returned an unwritten tensor before.
+    if (device.is_cuda())
+      check_cuda_status(cudaMemcpy(out.data_ptr(), data_ptr(), bytes, cudaMemcpyDeviceToDevice), "NDArray::clone",
+                        "cudaMemcpy");
     else std::memcpy(out.data_ptr(), data_ptr(), bytes);  // ENG3 E2: host clone, no CUDA call
   }
   return out;
@@ -920,7 +958,8 @@ NDArray NDArray::to(Device dev) const {
   NDArray out(shape, dtype, dev);
   size_t bytes = numel() * dtype_size(dtype);
   cudaMemcpyKind k = device.is_cuda() ? cudaMemcpyDeviceToHost : cudaMemcpyHostToDevice;
-  if (bytes) cudaMemcpy(out.data_ptr(), data_ptr(), bytes, k);
+  // ENG5-S site 7 (ENG5 S2): the copy's own returned status is checked (both directions), as in clone.
+  if (bytes) check_cuda_status(cudaMemcpy(out.data_ptr(), data_ptr(), bytes, k), "NDArray::to", "cudaMemcpy");
   return out;
 }
 namespace {
@@ -1025,18 +1064,99 @@ struct DimSpec {
   int64_t b_str[TC_MAX_DIMS];
 };
 
+// BWDF1-HOST-BEGIN: host-only helpers, standard library only. tensor_cuda/tests/test_bwdf1_zero_extent.py compiles
+// this block's exact text with the host compiler (no CUDA, no GPU) to drive the dispatch guard and the shape rule
+// directly; keep it self-contained.
+std::string bcast_shape_text(const Shape& s) {
+  std::string t = "[";
+  for (size_t i = 0; i < s.size(); ++i) {
+    if (i) t += ", ";
+    t += std::to_string(s[i]);
+  }
+  return t + "]";
+}
+
+// BWD-F1 Z2: NumPy's broadcasting rule. Shapes align at their last axis (a missing leading axis counts as 1); two
+// extents are compatible when they are equal or one of them is 1, and the output extent is the other one. So 0
+// against 1 gives 0 (an empty operand stays empty), and 0 against an extent above 1 is refused, naming both shapes.
+// Before, the output extent was max(a, b): 0 against 1 gave 1, and ew_binary then launched over a non-empty output
+// with the empty operand, whose storage is a null pointer (audit BWDA-F01/F03 witnesses: binary_kernel read from
+// 0x0 under memcheck). For shapes with no zero extent the result is unchanged (equal -> that extent; one of them 1 ->
+// the other, which is the max). The refusal runs on the host before any allocation or launch.
+// Prior art: NumPy's documentation, "Broadcasting" (general broadcasting rules; an extent of 0 broadcasts only
+// against 0 or 1), taken as is; the same rule is the Python array API standard's. Ours: the refusal text and its
+// placement before any CUDA call.
 Shape broadcast_shape(const Shape& a, const Shape& b) {
   int na = (int)a.size(), nb = (int)b.size(), n = na > nb ? na : nb;
   Shape out(n);
   for (int i = 0; i < n; ++i) {
     int64_t ad = (i < n - na) ? 1 : a[i - (n - na)];
     int64_t bd = (i < n - nb) ? 1 : b[i - (n - nb)];
-    if (ad != bd && ad != 1 && bd != 1)
-      throw std::runtime_error("shapes not broadcastable");
-    out[i] = ad > bd ? ad : bd;
+    if (ad == bd) out[i] = ad;
+    else if (ad == 1) out[i] = bd;
+    else if (bd == 1) out[i] = ad;
+    else
+      throw std::runtime_error("shapes not broadcastable: " + bcast_shape_text(a) + " and " + bcast_shape_text(b) +
+                               " (extents " + std::to_string(ad) + " and " + std::to_string(bd) + " at output axis " +
+                               std::to_string(i) + ")");
   }
   return out;
 }
+
+// BWD-F1 Z2: where_nd's three-operand broadcast, the same rule folded left; a refusal names all three operand shapes
+// (the inner call's message would name an intermediate shape). Prior art: NumPy's numpy.broadcast_shapes (n-ary form
+// of the same rule). Ours: the message.
+Shape broadcast_shape3(const Shape& c, const Shape& x, const Shape& y) {
+  try {
+    return broadcast_shape(broadcast_shape(c, x), y);
+  } catch (const std::runtime_error&) {
+    throw std::runtime_error("shapes not broadcastable: cond " + bcast_shape_text(c) + ", x " + bcast_shape_text(x) +
+                             " and y " + bcast_shape_text(y));
+  }
+}
+
+// BWD-F1 Z2 dispatch guard: refuse, before any allocation or launch, an operand with zero elements when the output
+// has elements. Such an operand cannot be read (its storage is a null pointer), so a future shape bug fails here on
+// the host instead of on the device. With the rule above no public path reaches it (an operand extent 0 makes the
+// output extent 0); it is defence in depth. Extents are never negative, so "has zero elements" is "has an extent 0".
+// Prior art: no prior art known to me for this exact check (a precondition assertion before a kernel launch is common
+// practice; unverified -- lead to check: "empty operand non-empty output broadcast check").
+void require_readable_operands(const char* op, const Shape& out, std::initializer_list<const char*> names,
+                               std::initializer_list<const Shape*> shapes) {
+  const auto empty = [](const Shape& s) {
+    for (int64_t e : s)
+      if (e == 0) return true;
+    return false;
+  };
+  if (empty(out)) return;
+  const char* const* name = names.begin();
+  for (const Shape* s : shapes) {
+    if (empty(*s))
+      throw std::runtime_error(std::string(op) + ": operand " + *name + " " + bcast_shape_text(*s) +
+                               " has no elements but the output " + bcast_shape_text(out) +
+                               " has elements; refused before any launch");
+    ++name;
+  }
+}
+// BWDF1-HOST-END
+}  // namespace
+
+// BWD-F2 R2 (review BWDF1R1-F02): the rank ceiling of the fixed-size metadata arrays. Every launch spec in this file
+// that is indexed by axis (DimSpec, ReduceSpec and reduce_kernel's coord, PermSpec, Dim3Spec, DimCopySpec, GatherSpec,
+// FlipSpec) holds TC_MAX_DIMS slots, and NDArray::reshape / unsqueeze can build a larger rank as metadata only (an
+// empty operand needs no storage at all). Each consumer calls this with the rank it will write into its spec, before
+// any allocation, metadata write or CUDA call, so a rank-9 operand (empty or not) is refused on the host instead of
+// writing slot 8 of an 8-slot array. Ranks within the ceiling are unchanged. Prior art: the engine's own TC_MAX_DIMS
+// refusals at the DLPack and factory entries (bindings.cpp, P1T-FIX1 F03); a fixed-capacity launch descriptor checked
+// against its capacity is common practice (no specific prior art known to me). Ours: the per-consumer placement.
+void check_meta_rank(const char* op, int rank, const std::string& operands) {
+  if (rank > TC_MAX_DIMS)
+    throw std::runtime_error(std::string(op) + ": rank " + std::to_string(rank) + " exceeds TC_MAX_DIMS=" +
+                             std::to_string(TC_MAX_DIMS) + ", the size of the op's metadata arrays (" + operands +
+                             "); refused before any allocation");
+}
+
+namespace {
 // broadcast strides of input `in` aligned to output of rank n.
 void bcast_strides(const Shape& in, const Shape& out, int64_t* dst) {
   int n = (int)out.size(), nin = (int)in.size();
@@ -1145,9 +1265,16 @@ __global__ void ge_kernel(const T* a, T* out, int64_t n, float s) {
 }
 }  // namespace
 
+// BWD-F1 Z2: NumPy's broadcast of two shapes (broadcast_shape above) for callers outside this file that must refuse
+// before their own first CUDA call (ops::masked_fill allocates its fill first). Prior art: as broadcast_shape.
+Shape broadcast_shapes(const Shape& a, const Shape& b) { return broadcast_shape(a, b); }
+
 NDArray ew_binary(const NDArray& a, const NDArray& b, int op) {
   if (a.dtype != b.dtype) throw std::runtime_error("ew_binary dtype mismatch");
+  check_meta_rank("ew_binary", std::max(a.ndim(), b.ndim()),  // BWD-F2 R2: DimSpec's slots
+                  "operand a " + bcast_shape_text(a.shape) + ", operand b " + bcast_shape_text(b.shape));
   Shape out_shape = broadcast_shape(a.shape, b.shape);
+  require_readable_operands("ew_binary", out_shape, {"a", "b"}, {&a.shape, &b.shape});  // BWD-F1 Z2 guard
   NDArray out(out_shape, a.dtype, a.device);
   int64_t n = out.numel();
   if (n == 0) return out;
@@ -1215,6 +1342,42 @@ NDArray ge_scalar(const NDArray& a, double sval) {
 }
 
 // ------------------------------------------------------------- reductions
+// BWD-F3 E3 (review BWDF1R2-F06): the reduction-axis rule, shared by every reduction entry (reduce_impl, which writes
+// ReduceSpec and serves reduce_sum / max / min / prod and every ops.cpp wrapper; reduce_arg; ops::mean, which reads
+// the axes' extents itself before its sum). Before, each entry wrote `ax < 0 ? ax + nd : ax` straight into
+// ReduceSpec::reduced[] and keep_shape[] and read a.shape[d]: sum([8]) on a rank-1 operand wrote reduced[8] (past the
+// 8-slot array) and read a one-element shape vector at 8; sum([0, 0]) on [2] marked one axis but multiplied its
+// extent twice (red_size 4), and the contiguous-tail kernel then read four elements of a two-element buffer. Now each
+// axis is normalized and range-checked, and a repeated axis is refused, before anything is indexed or written.
+// Valid, distinct axes are returned unchanged in order, so every accepted call computes exactly what it did before.
+// Prior art: NumPy's normalize_axis_tuple / normalize_axis_index (numpy.core.numeric, numpy/core/src/multiarray;
+// AxisError "axis 8 is out of bounds for array of dimension 1", ValueError "duplicate value in axis"); taken as the
+// rule and the texts. Ours: one helper shared by the engine's entries, and the operand context after the text.
+std::vector<int> normalize_reduce_axes(const char* op, const std::vector<int>& axes, const Shape& shape) {
+  const int nd = (int)shape.size();
+  auto ctx = [&]() {
+    std::string t = " (axes [";
+    for (size_t i = 0; i < axes.size(); ++i) t += (i ? ", " : "") + std::to_string(axes[i]);
+    return t + "], operand " + bcast_shape_text(shape) + ")";
+  };
+  std::vector<int> out;
+  out.reserve(axes.size());
+  std::vector<char> seen((size_t)nd, 0);
+  for (int ax : axes) {
+    if (ax < -nd || ax >= nd)
+      throw std::out_of_range(std::string(op) + ": axis " + std::to_string(ax) +
+                              " is out of bounds for array of dimension " + std::to_string(nd) + ctx() +
+                              "; refused before any allocation");
+    const int d = ax < 0 ? ax + nd : ax;
+    if (seen[(size_t)d])
+      throw std::invalid_argument(std::string(op) + ": duplicate value in axis" + ctx() +
+                                  "; refused before any allocation");
+    seen[(size_t)d] = 1;
+    out.push_back(d);
+  }
+  return out;
+}
+
 namespace {
 struct ReduceSpec {
   int ndim;
@@ -1303,6 +1466,10 @@ __global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n) 
 
 NDArray reduce_impl(const NDArray& a, std::vector<int> axes, bool keepdim, int mode) {
   int nd = a.ndim();
+  check_meta_rank("reduce", nd, "operand " + bcast_shape_text(a.shape));  // BWD-F2 R2: ReduceSpec / coord slots
+  // BWD-F3 E3 (BWDF1R2-F06): every axis normalized, range-checked and distinct before any shape read or spec write;
+  // the loops below then read only valid, distinct, non-negative axes.
+  axes = normalize_reduce_axes("reduce", axes, a.shape);
   if (axes.empty()) for (int d = 0; d < nd; ++d) axes.push_back(d);
   ReduceSpec s{};
   s.ndim = nd;
@@ -1310,7 +1477,24 @@ NDArray reduce_impl(const NDArray& a, std::vector<int> axes, bool keepdim, int m
   Shape keep_shape(nd);
   s.red_size = 1;
   for (int d = 0; d < nd; ++d) { s.in_shape[d] = a.shape[d]; s.in_str[d] = istr[d]; s.reduced[d] = 0; keep_shape[d] = a.shape[d]; }
-  for (int ax : axes) { int d = ax < 0 ? ax + nd : ax; s.reduced[d] = 1; s.red_size *= a.shape[d]; keep_shape[d] = 1; }
+  // BWD-F2 R7 (review BWDF1R1-F08): decide whether a reduced axis is empty before multiplying the reduced extents.
+  // Before, red_size multiplied them in axis order, so an empty input reshaped to [2^32, 2^32, 0] overflowed int64 on
+  // the first two extents before the 0 was reached. With an empty reduced axis the count is 0 (what the old product
+  // gave whenever it did not overflow); otherwise every reduced extent is >= 1 and their product is at most the input's
+  // element count, which the NDArray byte bound keeps inside int64 (checked anyway). Non-empty results are unchanged.
+  // Prior art: P1T-FIX2's numel_of rule in this file (zero before multiplying); GCC's __builtin_mul_overflow (2015).
+  bool reduced_empty = false;
+  for (int ax : axes) { int d = ax < 0 ? ax + nd : ax; s.reduced[d] = 1; keep_shape[d] = 1; reduced_empty = reduced_empty || a.shape[d] == 0; }
+  if (reduced_empty) {
+    s.red_size = 0;
+  } else {
+    for (int ax : axes) {
+      int d = ax < 0 ? ax + nd : ax;
+      if (__builtin_mul_overflow(s.red_size, a.shape[d], &s.red_size))
+        throw std::overflow_error("reduce: the reduced element count of " + bcast_shape_text(a.shape) +
+                                  " overflows int64");
+    }
+  }
   Shape ostr = contiguous_strides(keep_shape);
   for (int d = 0; d < nd; ++d) s.out_str[d] = ostr[d];
   NDArray out(keep_shape, a.dtype, a.device);
@@ -1369,7 +1553,13 @@ NDArray reduce_to(const NDArray& a, const Shape& target) {
   for (int d = 0; d < nd; ++d) {
     int td = d - (nd - nt);
     int64_t tsz = (td < 0) ? 1 : target[td];
-    if (tsz == 1 && a.shape[d] > 1) axes.push_back(d);
+    // BWD-F1 Z3 (audit BWDA-F03): sum every axis where the target extent is 1 and the source extent is not 1,
+    // including 0. Before, the test was `> 1`, so a zero-extent axis against a target 1 was never summed and the
+    // reshape below raised "element count mismatch". A sum over an empty axis gives zeros (reduce_impl starts a sum
+    // at 0 and reads no element). Axes with extents above 1 are summed exactly as before, so results for gradients
+    // with no zero extent are bitwise unchanged. Prior art: PyTorch's Tensor.sum_to_size / at::sum_to (the gradient of
+    // a broadcast operand is the sum over its broadcast axes), NumPy's empty sum (0); taken as is.
+    if (tsz == 1 && a.shape[d] != 1) axes.push_back(d);
   }
   NDArray summed = axes.empty() ? a.clone() : reduce_sum(a, axes, /*keepdim=*/true);
   return summed.reshape(target);
@@ -1390,6 +1580,7 @@ __global__ void permute_kernel(const T* in, T* out, PermSpec s, int64_t n) {
 
 NDArray permute(const NDArray& a, const std::vector<int>& dims) {
   int nd = a.ndim();
+  check_meta_rank("permute", nd, "operand " + bcast_shape_text(a.shape));  // BWD-F2 R2: PermSpec's slots
   Shape in_str = contiguous_strides(a.shape);
   Shape out_shape(nd);
   PermSpec s{}; s.ndim = nd;
@@ -1439,13 +1630,23 @@ __global__ void compare_scalar_kernel(const T* a, T* out, int64_t n, float s, in
   if (i < n) st<T>(out, i, cmp(ld<T>(a, i), s, op));
 }
 struct Dim3Spec { int ndim; int64_t out_str[TC_MAX_DIMS]; int64_t c_str[TC_MAX_DIMS]; int64_t x_str[TC_MAX_DIMS]; int64_t y_str[TC_MAX_DIMS]; };
-template <typename T>
-__global__ void where_kernel(const T* c, const T* x, const T* y, T* out, Dim3Spec s, int64_t n) {
+// BWD-F2 R5 (review BWDF1R1-F07): the condition is loaded in its own dtype. Before, where_kernel took T (x's dtype) for
+// the condition too, so a bool [4] condition under float32 data was read as four float32 values (16 bytes from a
+// 4-byte buffer). A float condition of the data's dtype takes exactly the old predicate, ld<T>(c, i) != 0.f, so every
+// result Build B gave for such a condition is bitwise unchanged; bool, uint8 and int64 conditions test the stored
+// integer against zero. Prior art: NumPy's numpy.where / numpy.putmask (the condition is truth-tested in its own
+// dtype, independent of the data's), taken as the rule. Ours: the per-dtype load.
+template <typename C> __device__ __forceinline__ bool cond_at(const C* c, int64_t i) { return c[i] != C(0); }
+template <> __device__ __forceinline__ bool cond_at<float>(const float* c, int64_t i) { return ld<float>(c, i) != 0.f; }
+template <> __device__ __forceinline__ bool cond_at<__half>(const __half* c, int64_t i) { return ld<__half>(c, i) != 0.f; }
+template <> __device__ __forceinline__ bool cond_at<__nv_bfloat16>(const __nv_bfloat16* c, int64_t i) { return ld<__nv_bfloat16>(c, i) != 0.f; }
+template <typename T, typename C>
+__global__ void where_kernel(const C* c, const T* x, const T* y, T* out, Dim3Spec s, int64_t n) {
   int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= n) return;
   int64_t rem = idx, co = 0, xo = 0, yo = 0;
   for (int d = 0; d < s.ndim; ++d) { int64_t cc = rem / s.out_str[d]; rem -= cc * s.out_str[d]; co += cc * s.c_str[d]; xo += cc * s.x_str[d]; yo += cc * s.y_str[d]; }
-  st<T>(out, idx, ld<T>(c, co) != 0.f ? ld<T>(x, xo) : ld<T>(y, yo));
+  st<T>(out, idx, cond_at<C>(c, co) ? ld<T>(x, xo) : ld<T>(y, yo));
 }
 }  // namespace
 
@@ -1457,7 +1658,10 @@ NDArray ew_pow(const NDArray& a, double p) {
 }
 NDArray compare(const NDArray& a, const NDArray& b, int op) {
   if (a.dtype != b.dtype) throw std::runtime_error("compare dtype mismatch");
+  check_meta_rank("compare", std::max(a.ndim(), b.ndim()),  // BWD-F2 R2: DimSpec's slots
+                  "operand a " + bcast_shape_text(a.shape) + ", operand b " + bcast_shape_text(b.shape));
   Shape os = broadcast_shape(a.shape, b.shape);
+  require_readable_operands("compare", os, {"a", "b"}, {&a.shape, &b.shape});  // BWD-F1 Z2 guard
   NDArray out(os, a.dtype, a.device);
   int64_t n = out.numel();
   if (!n) return out;
@@ -1476,7 +1680,23 @@ NDArray compare_scalar(const NDArray& a, double sv, int op) {
   return out;
 }
 NDArray where_nd(const NDArray& c, const NDArray& x, const NDArray& y) {
-  Shape os = broadcast_shape(broadcast_shape(c.shape, x.shape), y.shape);
+  const std::string ops_text = "cond " + bcast_shape_text(c.shape) + " " + dtype_name(c.dtype) + ", x " +
+                               bcast_shape_text(x.shape) + " " + dtype_name(x.dtype) + ", y " +
+                               bcast_shape_text(y.shape) + " " + dtype_name(y.dtype);
+  check_meta_rank("where", std::max({c.ndim(), x.ndim(), y.ndim()}), ops_text);  // BWD-F2 R2: Dim3Spec's slots
+  Shape os = broadcast_shape3(c.shape, x.shape, y.shape);  // BWD-F1 Z2: NumPy's rule, all three shapes named
+  require_readable_operands("where", os, {"cond", "x", "y"}, {&c.shape, &x.shape, &y.shape});  // BWD-F1 Z2 guard
+  // BWD-F2 R5 (BWDF1R1-F07): the data operands are both read as x's dtype, so they must match. Checked before the
+  // allocation; the condition needs no check of its own, it is loaded in its own dtype below.
+  // BWD-F3 D1 (closes BWDF1R2-F05 by ruling): where's contract requires x and y to match, so the mismatch is refused
+  // for every call, before any work, including an empty output (BWD-F2 accepted that one as Build B's empty no-op,
+  // and refused a non-empty one even when the condition never selects y). A domain refusal (BOUNDARY_F3.json).
+  // Prior art: NumPy's where promotes x and y to one result dtype (no implicit promotion exists here, so a mismatch
+  // is refused); no other prior art known to me.
+  if (x.dtype != y.dtype)
+    throw std::runtime_error("where: x has dtype " + std::string(dtype_name(x.dtype)) + " but y has " +
+                             dtype_name(y.dtype) + "; the data operands must match (" + ops_text +
+                             "); refused before any allocation");
   NDArray out(os, x.dtype, x.device);
   int64_t n = out.numel();
   if (!n) return out;
@@ -1484,11 +1704,31 @@ NDArray where_nd(const NDArray& c, const NDArray& x, const NDArray& y) {
   Shape ostr = contiguous_strides(os);
   for (int d = 0; d < s.ndim; ++d) s.out_str[d] = ostr[d];
   bcast_strides(c.shape, os, s.c_str); bcast_strides(x.shape, os, s.x_str); bcast_strides(y.shape, os, s.y_str);
-  DISPATCH_FLOAT(x.dtype, T, { where_kernel<T><<<nblk(n), kT>>>(static_cast<T*>(c.data_ptr()), static_cast<T*>(x.data_ptr()), static_cast<T*>(y.data_ptr()), static_cast<T*>(out.data_ptr()), s, n); });
+#define TC_WHERE_LAUNCH(CT)                                                                                     \
+  where_kernel<T, CT><<<nblk(n), kT>>>(static_cast<const CT*>(c.data_ptr()), static_cast<T*>(x.data_ptr()), \
+                                       static_cast<T*>(y.data_ptr()), static_cast<T*>(out.data_ptr()), s, n)
+  DISPATCH_FLOAT(x.dtype, T, {
+    switch (c.dtype) {  // BWD-F2 R5: the condition's own dtype
+      case DType::Float32: TC_WHERE_LAUNCH(float); break;
+      case DType::Float16: TC_WHERE_LAUNCH(__half); break;
+      case DType::BFloat16: TC_WHERE_LAUNCH(__nv_bfloat16); break;
+      case DType::Bool: TC_WHERE_LAUNCH(uint8_t); break;
+      case DType::Uint8: TC_WHERE_LAUNCH(uint8_t); break;
+      case DType::Int64: TC_WHERE_LAUNCH(int64_t); break;
+      default: throw std::runtime_error("where: unsupported condition dtype (" + ops_text + ")");
+    }
+  });
+#undef TC_WHERE_LAUNCH
   cuda_check_last("where");
   return out;
 }
 NDArray broadcast_to(const NDArray& a, const Shape& shape) {
+  // BWD-F1 Z2: check the shapes with NumPy's rule before NDArray::zeros allocates and fills the left operand, so a
+  // refusal comes before any CUDA call. The output is broadcast_shape(shape, a.shape), as before (ew_binary computes
+  // it again); results are unchanged. Prior art: NumPy's broadcasting rule (see broadcast_shape).
+  check_meta_rank("broadcast_to", std::max((int)shape.size(), a.ndim()),  // BWD-F2 R2: before the zeros allocation
+                  "target " + bcast_shape_text(shape) + ", operand " + bcast_shape_text(a.shape));
+  (void)broadcast_shape(shape, a.shape);
   return ew_binary(NDArray::zeros(shape, a.dtype, a.device), a, 0);
 }
 
@@ -1510,20 +1750,104 @@ __global__ void dimcopy_kernel(const T* small_in, T* small_out, const T* big_in,
 }
 }  // namespace
 
+// BWD-F1 Amendment 1 (Part C, C2): host checks for the multi-operand copy ops. Each refuses, before any allocation or
+// CUDA call, an operand whose rank, non-copy extents, dtype or device differ from what the index arithmetic assumes, and
+// any dim, offset or count out of range, with a runtime_error naming the op, the operand index and the shapes. Before,
+// cat_nd took shape, dtype and device from arrs[0] and checked nothing else (a larger later operand wrote past the
+// output; Voice KV-RV1 F1). Accepted inputs are unchanged. Prior art: NumPy's numpy.concatenate / numpy.stack rules
+// (same rank; every extent equal except the concatenation axis, for stack every shape equal; an empty operand follows
+// the same rule; axis in [-ndim, ndim), for stack [-(ndim+1), ndim]); taken as the reference. Ours: the messages, the
+// device and dtype terms (NumPy promotes dtypes; this engine's copy kernel cannot, so a mismatch is refused).
+namespace {
+std::string copy_operand_text(const NDArray& a) {
+  return bcast_shape_text(a.shape) + " " + dtype_name(a.dtype) + " on " + a.device.str();
+}
+bool same_device(const Device& a, const Device& b) { return a.type == b.type && a.index == b.index; }
+// The dtype set of DISPATCH_FLOAT, checked before the allocation only when a launch would follow (some operand has
+// elements): B threw the same text from inside the dispatch after allocating; an all-empty call launches nothing and
+// keeps returning its (empty) result.
+bool float_dtype(DType t) { return t == DType::Float32 || t == DType::Float16 || t == DType::BFloat16; }
+}  // namespace
+
+int check_copy_operands(const char* op, const std::vector<NDArray>& arrs, int dim, bool all_extents) {
+  if (arrs.empty()) throw std::runtime_error(std::string(op) + ": empty input");
+  const NDArray& a0 = arrs[0];
+  const int nd = a0.ndim();
+  const int lo = all_extents ? -(nd + 1) : -nd, hi = all_extents ? nd : nd - 1;  // stack inserts an axis
+  if (nd == 0 && !all_extents)  // stack of rank-0 operands is valid (NumPy and Build B both give a rank-1 result)
+    throw std::runtime_error(std::string(op) + ": operand 0 has shape [] (rank 0); operands need rank >= 1");
+  if (dim < lo || dim > hi)
+    throw std::runtime_error(std::string(op) + ": dim " + std::to_string(dim) + " out of range [" +
+                             std::to_string(lo) + ", " + std::to_string(hi) + "] for operand 0 of shape " +
+                             bcast_shape_text(a0.shape));
+  const int d = all_extents ? -1 : (dim < 0 ? dim + nd : dim);
+  // BWD-F2 R2 (BWDF1R1-F02): the rank the copy writes into DimCopySpec, before anything is allocated or written. For
+  // stack that is the rank after its unsqueeze (rank-8 operands stack to rank 9); cat checks its operands' rank.
+  check_meta_rank(op, nd + (all_extents ? 1 : 0), "operand 0 " + copy_operand_text(a0));
+  bool any_elements = a0.numel() > 0;
+  for (size_t i = 1; i < arrs.size(); ++i) {
+    const NDArray& a = arrs[i];
+    const std::string pair = " (operand " + std::to_string(i) + " " + copy_operand_text(a) + ", operand 0 " +
+                             copy_operand_text(a0) + ")";
+    if (a.ndim() != nd)
+      throw std::runtime_error(std::string(op) + ": operand " + std::to_string(i) + " has rank " +
+                               std::to_string(a.ndim()) + " but operand 0 has rank " + std::to_string(nd) + pair);
+    for (int k = 0; k < nd; ++k)
+      if (k != d && a.shape[k] != a0.shape[k])
+        throw std::runtime_error(std::string(op) + ": operand " + std::to_string(i) + " has extent " +
+                                 std::to_string(a.shape[k]) + " at dim " + std::to_string(k) + " but operand 0 has " +
+                                 std::to_string(a0.shape[k]) +
+                                 (all_extents ? "; every shape must be equal" : "; extents must match outside dim " +
+                                                                                    std::to_string(d)) + pair);
+    // BWD-F2 R1 (BWDF1R1-F03), check what is read: the output takes operand 0's dtype and device (Build B), and only
+    // an operand whose bytes are copied (one with elements) must match them, because the copy kernel reads it as the
+    // output's dtype on the output's device. An operand with no elements is never read, so its dtype and device are
+    // not checked: cat([float32 [2, 3], float16 [0, 3]]) gives Build B's float32 [2, 3] again. Rank and extents stay
+    // checked for every operand (they decide the output shape). Prior art: NumPy's numpy.concatenate (shapes checked
+    // for every operand, empty ones included); ours: the bytes-read condition on the dtype and device terms (NumPy
+    // promotes dtypes instead and has no device).
+    if (a.numel() > 0 && a.dtype != a0.dtype)
+      throw std::runtime_error(std::string(op) + ": operand " + std::to_string(i) + " has dtype " +
+                               dtype_name(a.dtype) + " but operand 0 has " + dtype_name(a0.dtype) +
+                               " (the output's dtype; operand " + std::to_string(i) + " has elements to copy)" + pair);
+    if (a.numel() > 0 && !same_device(a.device, a0.device))
+      throw std::runtime_error(std::string(op) + ": operand " + std::to_string(i) + " is on " + a.device.str() +
+                               " but operand 0 is on " + a0.device.str() + " (the output's device; operand " +
+                               std::to_string(i) + " has elements to copy)" + pair);
+    any_elements = any_elements || a.numel() > 0;
+  }
+  if (any_elements && !float_dtype(a0.dtype))
+    throw std::runtime_error(std::string(op) + ": op supports float32/float16/bfloat16 only (operand 0 " +
+                             copy_operand_text(a0) + ")");
+  return d;
+}
+
 NDArray cat_nd(const std::vector<NDArray>& arrs, int dim) {
-  if (arrs.empty()) throw std::runtime_error("cat: empty input");
+  // BWD-F1 Amendment 1 C2: every term checked on the host before the output allocation (see check_copy_operands).
+  dim = check_copy_operands("cat", arrs, dim, /*all_extents=*/false);
   int nd = arrs[0].ndim();
-  if (dim < 0) dim += nd;
   Shape os = arrs[0].shape;
+  // BWD-F2 R7 (BWDF1R1-F08): the concatenated extent as a checked sum (two individually representable [0, 2^62]
+  // operands overflowed `total` before the constructor's byte bound could refuse), and every stride computed, before
+  // the allocation. Values for accepted inputs are unchanged. Prior art: GCC's __builtin_add_overflow (2015);
+  // CERT INT32-C (unverified -- lead to check). Ours: the placement.
   int64_t total = 0;
-  for (auto& a : arrs) total += a.shape[dim];
+  for (size_t i = 0; i < arrs.size(); ++i)
+    if (__builtin_add_overflow(total, arrs[i].shape[dim], &total))
+      throw std::overflow_error("cat: the concatenated extent at dim " + std::to_string(dim) +
+                                " overflows int64 at operand " + std::to_string(i) + " " +
+                                copy_operand_text(arrs[i]));
   os[dim] = total;
-  NDArray out(os, arrs[0].dtype, arrs[0].device);
   Shape big_str = contiguous_strides(os);
+  std::vector<Shape> istrs;
+  istrs.reserve(arrs.size());
+  for (auto& a : arrs) istrs.push_back(contiguous_strides(a.shape));
+  NDArray out(os, arrs[0].dtype, arrs[0].device);
   int64_t running = 0;
-  for (auto& a : arrs) {
+  for (size_t ai = 0; ai < arrs.size(); ++ai) {
+    const NDArray& a = arrs[ai];
     DimCopySpec s{}; s.ndim = nd; s.dim = dim; s.off = running;
-    Shape istr = contiguous_strides(a.shape);
+    const Shape& istr = istrs[ai];
     for (int d = 0; d < nd; ++d) { s.iter_shape[d] = a.shape[d]; s.iter_str[d] = istr[d]; s.big_str[d] = big_str[d]; }
     int64_t n = a.numel();
     if (n) { DISPATCH_FLOAT(out.dtype, T, { dimcopy_kernel<T, 1><<<nblk(n), kT>>>(static_cast<T*>(a.data_ptr()), nullptr, nullptr, static_cast<T*>(out.data_ptr()), s, n); }); }
@@ -5394,9 +5718,45 @@ NDArray embedding_backward(const NDArray& grad, const NDArray& idx,
 }
 void axpy_(NDArray& param, const NDArray& other, double alpha) {
   // param += alpha*other  (shapes equal)
+  // BWD-F1 Z2: the update broadcasts `other` into `param` through ew_binary, then copies param's byte count out of
+  // the result. Check the shapes on the host before ew_scalar's launch: NumPy's rule (0 against an extent above 1 is
+  // refused, naming both shapes), and a result with fewer elements than param, which only a zero extent in `other`
+  // can give (param [4, 1], other [4, 0] -> [4, 0]) and whose copy would read past an empty buffer. With no zero
+  // extent the result always has at least param's elements, so nothing that ran before is refused.
+  // Prior art: NumPy's broadcasting rule (see broadcast_shape); the element-count check is mine.
+  check_meta_rank("axpy_", std::max(param.ndim(), other.ndim()),  // BWD-F2 R2: before ew_scalar's launch
+                  "param " + bcast_shape_text(param.shape) + ", other " + bcast_shape_text(other.shape));
+  const Shape upd_shape = broadcast_shape(param.shape, other.shape);
+  if (numel_of(upd_shape) < param.numel())
+    throw std::runtime_error("axpy_: the update of param " + bcast_shape_text(param.shape) + " by other " +
+                             bcast_shape_text(other.shape) + " has shape " + bcast_shape_text(upd_shape) +
+                             ", fewer elements than param; refused before any launch");
+  // BWD-F2 R6 (review BWDF1R1-F12): the update must map element for element onto param. The copy below takes param's
+  // byte count from the start of the broadcast result, which is right only when that result is param's shape up to
+  // leading size-one axes. param [[1], [2]] with other [[10, 20], [30, 40]] broadcast to [2, 2]; the copy installed
+  // its first two values, [[11], [21]], so param's second row took the first row's update. Refused here, before any
+  // launch. Accepted: equal shapes, and shapes that differ only by leading size-one axes on either side (param [3]
+  // with other [1, 3]; param [1, 3] with other [3]), whose broadcast has param's elements in param's order.
+  // Prior art: PyTorch's in-place broadcast rule (an in-place op may not change the destination's shape: "output with
+  // shape [2, 1] doesn't match the broadcast shape [2, 2]"; unverified wording -- lead to check) and NumPy's
+  // out= rule for ufuncs; taken as the rule. Ours: the leading size-one allowance and the message.
+  {
+    auto strip = [](const Shape& s) {
+      size_t k = 0;
+      while (k < s.size() && s[k] == 1) ++k;
+      return Shape(s.begin() + k, s.end());
+    };
+    if (strip(upd_shape) != strip(param.shape))
+      throw std::runtime_error("axpy_: the update of param " + bcast_shape_text(param.shape) + " by other " +
+                               bcast_shape_text(other.shape) + " broadcasts to " + bcast_shape_text(upd_shape) +
+                               ", which does not map element for element onto param; refused before any launch");
+  }
   NDArray upd = ew_binary(param, ew_scalar(other, alpha, 2, false), 0);
   size_t bytes = param.numel() * dtype_size(param.dtype);
-  cudaMemcpy(param.data_ptr(), upd.data_ptr(), bytes, cudaMemcpyDeviceToDevice);
+  // ENG5-S site 8 (ENG5 S2): the in-place copy's own returned status is checked (a failed copy left `param` unchanged
+  // silently).
+  check_cuda_status(cudaMemcpy(param.data_ptr(), upd.data_ptr(), bytes, cudaMemcpyDeviceToDevice), "axpy_",
+                    "cudaMemcpy");
   if (bytes) param.mark_modified();
 }
 void sgd_step(NDArray& param, const NDArray& grad, NDArray& buf, double lr,
@@ -5433,12 +5793,30 @@ void adam_step(NDArray& param, const NDArray& grad, NDArray& m, NDArray& v,
 
 NDArray slice_nd(const NDArray& a, int dim, int64_t start, int64_t len) {
   int nd = a.ndim();
+  // BWD-F1 Amendment 1 C2: slice copies a region of one operand with the same dimcopy kernel as cat; before, neither
+  // dim nor the span was checked (a span past the extent read past the operand). Refused on the host before the
+  // allocation; accepted spans are unchanged. Prior art: NumPy/Python slicing bounds (here refused, not clamped:
+  // the public __getitem__ already clamps through Python's slice.indices before calling this).
+  if (dim < -nd || dim >= nd)
+    throw std::runtime_error("slice: dim " + std::to_string(dim) + " out of range for operand 0 of shape " +
+                             bcast_shape_text(a.shape));
   if (dim < 0) dim += nd;
+  if (start < 0 || len < 0 || start > a.shape[dim] || len > a.shape[dim] - start)
+    throw std::runtime_error("slice: start " + std::to_string(start) + " and length " + std::to_string(len) +
+                             " out of range for extent " + std::to_string(a.shape[dim]) + " at dim " +
+                             std::to_string(dim) + " of operand 0 of shape " + bcast_shape_text(a.shape));
   Shape os = a.shape; os[dim] = len;
-  NDArray out(os, a.dtype, a.device);
+  // BWD-F2 R2 (BWDF1R1-F02) and R8 (BWDF1R1-F09), before the allocation: the rank DimCopySpec holds, and the launch
+  // dtype when a copy will run (Build B threw DISPATCH_FLOAT's text after allocating; an empty slice launches nothing
+  // and keeps returning its empty result). Strides are computed before the allocation too (pure host arithmetic).
+  check_meta_rank("slice", nd, "operand 0 " + copy_operand_text(a));
+  if (numel_of(os) > 0 && !float_dtype(a.dtype))
+    throw std::runtime_error("slice: op supports float32/float16/bfloat16 only (operand 0 " + copy_operand_text(a) +
+                             "); refused before any allocation");
   Shape big_str = contiguous_strides(a.shape);
-  DimCopySpec s{}; s.ndim = nd; s.dim = dim; s.off = start;
   Shape ostr = contiguous_strides(os);
+  NDArray out(os, a.dtype, a.device);
+  DimCopySpec s{}; s.ndim = nd; s.dim = dim; s.off = start;
   for (int d = 0; d < nd; ++d) { s.iter_shape[d] = os[d]; s.iter_str[d] = ostr[d]; s.big_str[d] = big_str[d]; }
   int64_t n = out.numel();
   if (n) { DISPATCH_FLOAT(a.dtype, T, { dimcopy_kernel<T, 0><<<nblk(n), kT>>>(nullptr, static_cast<T*>(out.data_ptr()), static_cast<T*>(a.data_ptr()), nullptr, s, n); }); }
@@ -5522,7 +5900,9 @@ void axis_split(const Shape& shape, int axis, int64_t& outer, int64_t& A, int64_
 
 NDArray reduce_arg(const NDArray& a, int axis, bool is_max) {
   int nd = a.ndim();
-  if (axis < 0) axis += nd;
+  // BWD-F3 E3: the single axis range-checked before axis_split reads a.shape[axis] (before, an axis outside
+  // [-nd, nd) read past the shape vector). In-range axes are unchanged. Prior art: NumPy's normalize_axis_index.
+  axis = normalize_reduce_axes(is_max ? "argmax" : "argmin", {axis}, a.shape)[0];
   int64_t outer, A, inner; axis_split(a.shape, axis, outer, A, inner);
   Shape os; for (int d = 0; d < nd; ++d) if (d != axis) os.push_back(a.shape[d]);
   if (os.empty()) os.push_back(1);
@@ -5540,6 +5920,8 @@ NDArray cumsum_nd(const NDArray& a, int axis) {
 }
 NDArray gather_nd(const NDArray& a, int dim, const NDArray& index) {
   int nd = a.ndim();
+  // BWD-F2 R2: GatherSpec's slots (the rank ceiling only; index validation stays a listed residual).
+  check_meta_rank("gather", nd, "operand " + bcast_shape_text(a.shape) + ", index " + bcast_shape_text(index.shape));
   if (dim < 0) dim += nd;
   NDArray out(index.shape, a.dtype, a.device);
   GatherSpec s{}; s.ndim = nd; s.dim = dim;
@@ -5551,6 +5933,8 @@ NDArray gather_nd(const NDArray& a, int dim, const NDArray& index) {
 }
 NDArray scatter_add_nd(const Shape& shape, DType dtype, int dim, const NDArray& index, const NDArray& src) {
   int nd = (int)shape.size();
+  // BWD-F2 R2: GatherSpec's slots, before the zeros allocation (index validation stays a listed residual).
+  check_meta_rank("scatter_add", nd, "target " + bcast_shape_text(shape) + ", index " + bcast_shape_text(index.shape));
   if (dim < 0) dim += nd;
   NDArray outf = NDArray::zeros(shape, DType::Float32, src.device);
   GatherSpec s{}; s.ndim = nd; s.dim = dim;
@@ -5701,6 +6085,7 @@ NDArray argmax_last_axis(const NDArray& a) {
 
 NDArray flip_nd(const NDArray& a, const std::vector<int>& dims) {
   int nd = a.ndim();
+  check_meta_rank("flip", nd, "operand " + bcast_shape_text(a.shape));  // BWD-F2 R2: FlipSpec's slots
   FlipSpec s{}; s.ndim = nd;
   Shape str = contiguous_strides(a.shape);
   for (int d = 0; d < nd; ++d) { s.shape[d] = a.shape[d]; s.str[d] = str[d]; s.flip[d] = 0; }
@@ -5713,11 +6098,32 @@ NDArray flip_nd(const NDArray& a, const std::vector<int>& dims) {
 
 NDArray pad_into(const NDArray& small, const Shape& big_shape, int dim, int64_t start) {
   int nd = (int)big_shape.size();
+  // BWD-F1 Amendment 1 C2: slice's backward copies the gradient into a region of zeros of the input's shape; check the
+  // region on the host before the zeros are allocated (the slice forward's checks make it hold for engine callers).
+  if (dim < -nd || dim >= nd || small.ndim() != nd)
+    throw std::runtime_error("pad_into: dim " + std::to_string(dim) + " or rank of operand 0 " +
+                             bcast_shape_text(small.shape) + " does not fit the target " +
+                             bcast_shape_text(big_shape));
   if (dim < 0) dim += nd;
-  NDArray big = NDArray::zeros(big_shape, small.dtype, small.device);
+  for (int k = 0; k < nd; ++k)
+    if (k != dim && small.shape[k] != big_shape[k])
+      throw std::runtime_error("pad_into: operand 0 " + bcast_shape_text(small.shape) + " differs from the target " +
+                               bcast_shape_text(big_shape) + " outside dim " + std::to_string(dim));
+  if (start < 0 || start > big_shape[dim] || small.shape[dim] > big_shape[dim] - start)
+    throw std::runtime_error("pad_into: start " + std::to_string(start) + " with operand 0 " +
+                             bcast_shape_text(small.shape) + " runs past the target " + bcast_shape_text(big_shape) +
+                             " at dim " + std::to_string(dim));
+  // BWD-F2 R2 (BWDF1R1-F02) and R8 (BWDF1R1-F09), before the zeros are allocated and filled: the rank DimCopySpec
+  // holds, and the launch dtype when a copy will run (Build B allocated and filled first, then DISPATCH_FLOAT threw).
+  // An empty operand copies nothing and keeps returning the zeros. Strides are computed before the allocation too.
+  check_meta_rank("pad_into", nd, "operand 0 " + copy_operand_text(small) + ", target " + bcast_shape_text(big_shape));
+  if (small.numel() > 0 && !float_dtype(small.dtype))
+    throw std::runtime_error("pad_into: op supports float32/float16/bfloat16 only (operand 0 " +
+                             copy_operand_text(small) + "); refused before any allocation");
   Shape big_str = contiguous_strides(big_shape);
-  DimCopySpec s{}; s.ndim = nd; s.dim = dim; s.off = start;
   Shape istr = contiguous_strides(small.shape);
+  NDArray big = NDArray::zeros(big_shape, small.dtype, small.device);
+  DimCopySpec s{}; s.ndim = nd; s.dim = dim; s.off = start;
   for (int d = 0; d < nd; ++d) { s.iter_shape[d] = small.shape[d]; s.iter_str[d] = istr[d]; s.big_str[d] = big_str[d]; }
   int64_t n = small.numel();
   if (n) { DISPATCH_FLOAT(small.dtype, T, { dimcopy_kernel<T, 1><<<nblk(n), kT>>>(static_cast<T*>(small.data_ptr()), nullptr, nullptr, static_cast<T*>(big.data_ptr()), s, n); }); }
@@ -8046,27 +8452,56 @@ __global__ void write_rows_kernel(T* __restrict__ buf,
   int64_t d = i % D;
   int64_t l = (i / D) % L;
   int64_t b = i / (D * L);
-  int64_t row = (start + l) % CAP;
+  // BWD-F2 R4 (review BWDF1R1-F04): the host passes start already reduced to [0, CAP) and l < L <= CAP, so the ring
+  // row is start + l or start + l - CAP; written as a comparison against CAP - start, no intermediate leaves
+  // [0, CAP). Before, (start + l) % CAP overflowed int64 for start near INT64_MAX (INT64_MAX + 1 wraps to INT64_MIN,
+  // and INT64_MIN % 3 = -2, a write before the buffer). For start in [0, CAP) the row is the old (start + l) % CAP.
+  // Prior art: the standard overflow-free circular-buffer wrap (compare against the distance to the end instead of
+  // adding then reducing); CERT INT32-C (unverified -- lead to check: "circular buffer index overflow modulo").
+  int64_t row = (l < CAP - start) ? start + l : l - (CAP - start);
   buf[(b * CAP + row) * D + d] = src[i];
 }
 
+static int64_t product_dims(const Shape& shape, int first, int last);  // defined below (row-cache helpers)
+
 void write_rows(NDArray& buf, const NDArray& src, int64_t start) {
+  // BWD-F1 Amendment 1 C2: the messages name the operands (0 = buf, 1 = src) and their shapes; old texts are the
+  // prefixes. Added terms, all on the host before any launch: buf and src on one device (and a CUDA device when there
+  // is anything to copy); start >= 0 (the ring index (start + l) % CAP is negative for a negative start); the leading
+  // extents compared as products of the leading dims (before: numel / (CAP * D), a host division by zero when CAP or
+  // D is 0, and numel / (Ls * D) likewise). For CAP * D > 0 the products equal the old quotients, so accepted calls
+  // are unchanged. Prior art: no prior art known to me beyond the ring-buffer arithmetic itself.
+  const std::string ops_text = " (operand 0 buf " + copy_operand_text(buf) + ", operand 1 src " +
+                               copy_operand_text(src) + ")";
   if (buf.dtype != src.dtype)
-    throw std::runtime_error("write_rows: dtype mismatch");
+    throw std::runtime_error("write_rows: dtype mismatch" + ops_text);
   if (buf.ndim() < 2 || src.ndim() < 2)
-    throw std::runtime_error("write_rows: need >=2D buf and src");
+    throw std::runtime_error("write_rows: need >=2D buf and src" + ops_text);
+  // BWD-F2 R1 (BWDF1R1-F03), check what is read: the device term applies only when a copy will run (src has
+  // elements). An empty write copies nothing and returns, as in Build B (which returned None for an empty write across
+  // devices); BWD-F1 refused it.
+  if (src.numel() > 0 && !same_device(buf.device, src.device))
+    throw std::runtime_error("write_rows: device mismatch" + ops_text);
   int64_t D = buf.shape[buf.ndim() - 1];
   int64_t CAP = buf.shape[buf.ndim() - 2];
   int64_t Ls = src.shape[src.ndim() - 2];
   if (src.shape[src.ndim() - 1] != D)
-    throw std::runtime_error("write_rows: last-dim mismatch");
-  int64_t lead_b = buf.numel() / (CAP * D);
-  int64_t lead_s = src.numel() / (Ls * D);
+    throw std::runtime_error("write_rows: last-dim mismatch" + ops_text);
+  int64_t lead_b = product_dims(buf.shape, 0, buf.ndim() - 2);
+  int64_t lead_s = product_dims(src.shape, 0, src.ndim() - 2);
   if (lead_b != lead_s)
-    throw std::runtime_error("write_rows: leading-dim mismatch");
+    throw std::runtime_error("write_rows: leading-dim mismatch" + ops_text);
   if (Ls > CAP)
-    throw std::runtime_error("write_rows: src rows exceed capacity");
+    throw std::runtime_error("write_rows: src rows exceed capacity" + ops_text);
+  if (start < 0)
+    throw std::runtime_error("write_rows: start " + std::to_string(start) + " is negative" + ops_text);
   int64_t n = src.numel();
+  if (n && !buf.device.is_cuda())
+    throw std::runtime_error("write_rows: CUDA tensors required" + ops_text);
+  // BWD-F2 R4 (BWDF1R1-F04): reduce start modulo CAP on the host when a copy will run (n > 0 gives Ls >= 1 and
+  // CAP >= Ls, so CAP > 0); the kernel's wrap then stays inside [0, CAP) without overflow. (start % CAP + l) % CAP
+  // equals (start + l) % CAP wherever the latter did not overflow, so accepted writes land on the same rows.
+  if (n) start %= CAP;
   if (n) {
     // write_rows is a raw row copy — works for any POD type. uint8 is
     // dispatched explicitly (the float-only DISPATCH_FLOAT macro throws
@@ -8135,34 +8570,113 @@ __global__ void export_rows_bytes_kernel(
   out[i] = cache[outer * old_stride + (start + row) * row_bytes + byte];
 }
 
+// BWD-F2 R7 (review BWDF1R1-F08): emptiness first, then a checked product. Before, the leading-extent product
+// multiplied in axis order, so empty views such as [2^32, 2^32, 0, 3, 1] overflowed int64 before the 0 was reached
+// (Build B divided numel by the inner extents and got 0). A range with a zero extent is 0 (the exact count, and what
+// the old product gave whenever it did not overflow); otherwise every extent is >= 1 and the product is bounded by the
+// operand's element count, checked anyway. Prior art: P1T-FIX2's numel_of rule (this file); GCC's
+// __builtin_mul_overflow (2015). Ours: its use for the row-cache leading and inner counts.
 static int64_t product_dims(const Shape& shape, int first, int last) {
+  for (int i = first; i < last; ++i)
+    if (shape[i] == 0) return 0;
   int64_t out = 1;
-  for (int i = first; i < last; ++i) out *= shape[i];
+  for (int i = first; i < last; ++i)
+    if (__builtin_mul_overflow(out, shape[i], &out))
+      throw std::overflow_error("row-cache op: the product of extents " + std::to_string(first) + ".." +
+                                std::to_string(last - 1) + " of " + bcast_shape_text(shape) + " overflows int64");
   return out;
 }
 
-static int normalize_dim(int dim, int nd, const char* where) {
+// BWD-F2 R10 (review BWDF1R1-F11): the dim refusal keeps the old text "<op>: dim out of range" as its prefix and adds
+// the dim, the rank and the operand's position and shape (`operand`, the caller's context text). Prior art: P1T's
+// contextual shape/dtype diagnostics in this repo; ours: this site.
+static int normalize_dim(int dim, int nd, const char* where, const std::string& operand = std::string()) {
   int d = dim < 0 ? dim + nd : dim;
-  if (d < 0 || d >= nd) throw std::runtime_error(std::string(where) + ": dim out of range");
+  if (d < 0 || d >= nd)
+    throw std::runtime_error(std::string(where) + ": dim out of range: dim " + std::to_string(dim) + " for rank " +
+                             std::to_string(nd) + operand);
+  return d;
+}
+
+// BWD-F2 R10 (BWDF1R1-F11): a refusal raised while scanning a list of pairs or layers names the index. The exception
+// keeps its type (pybind11 maps overflow_error and runtime_error to different Python types) and its text, followed by
+// the position. Prior art: none known to me beyond exception chaining with context.
+template <typename F>
+static void with_index(const char* what, size_t i, size_t n, F&& f) {
+  const std::string tag = " [" + std::string(what) + " " + std::to_string(i) + " of " + std::to_string(n) + "]";
+  try {
+    f();
+  } catch (const std::overflow_error& e) {
+    throw std::overflow_error(std::string(e.what()) + tag);
+  } catch (const std::runtime_error& e) {
+    throw std::runtime_error(std::string(e.what()) + tag);
+  }
+}
+
+// BWD-F2 R7 (BWDF1R1-F08): checked sum of three extents (splice_rows' output extent; the arena's tail start).
+static int64_t checked_add3(int64_t a, int64_t b, int64_t c, const std::string& what) {
+  int64_t s = 0;
+  if (__builtin_add_overflow(a, b, &s) || __builtin_add_overflow(s, c, &s))
+    throw std::overflow_error(what + " overflows int64");
+  return s;
+}
+
+// BWD-F3 E4 (review BWDF1R2-F07): a row-cache check runs the output's byte bound, the NDArray constructor's own
+// function (ndarray_checked_nbytes), on the output shape it will construct, so a pair op refuses an output that
+// cannot be built before any pair's allocation or launch. Before, splice_rows_check proved the new extent fits int64
+// but left the byte bound to the constructor: in a pair list, an earlier pair allocated and launched before a later
+// pair's output ([0, 2^62, 2] uint8: 2^63 bytes, counting the zero as 1) was refused. The text keeps the
+// constructor's, after "<op>: the output " and before the operands. Called by export_rows_check, splice_rows_check,
+// evict_rows_check, export_rope_rows_check and rope_apply_check, i.e. by every pair preflight (export_row_pair,
+// export_row_pairs, swap_row_pairs_with_rope, evict_row_pairs, and the arena through swap or evict). Splice is the
+// op that grows an extent past its operands'; the others' outputs have no larger extents than an operand's, but an
+// operand can itself lie beyond the byte bound: an empty tensor reshaped to [0, 2^62, 2] (uint8) is a valid view
+// (no bytes are allocated for it), and export_rows of its whole span has the same output shape, which this check
+// refuses (BWD-F4 H3, review BWDF1R3-F03; before, this text said only splice can fire it). For an operand that was
+// built by the constructor, the bound holds already and the call cannot fire. It is kept for one rule at every
+// preflight. Prior art: the check-then-act split; ENG3-F1's byte bound (this file). No other prior art
+// known to me. Ours: running the constructor's bound in the preflight.
+static void preflight_out_bound(const char* op, const Shape& out_shape, DType dtype, const std::string& ctx) {
+  try {
+    (void)ndarray_checked_nbytes(out_shape, dtype);
+  } catch (const std::overflow_error& e) {
+    throw std::overflow_error(std::string(op) + ": the output " + e.what() + ctx);
+  }
+}
+
+// BWD-F1 Amendment 1 C2: the row-cache copy ops' checks as host functions, so the paired/batched ops below can run
+// every pair's checks before any pair's allocation or launch. Terms and old message texts (now prefixes, followed by
+// the operand shapes) are unchanged; `start + len > old_seq` is written as `len > old_seq - start` (no overflow).
+// Prior art: none known to me beyond the check-then-act split.
+int export_rows_check(const NDArray& cache, int dim, int64_t start, int64_t len) {
+  const std::string t = " (operand 0 cache " + copy_operand_text(cache) + ", dim " + std::to_string(dim) +
+                        ", start " + std::to_string(start) + ", length " + std::to_string(len) + ")";
+  if (!cache.device.is_cuda())
+    throw std::runtime_error("export_rows: CUDA tensor required" + t);
+  if (cache.ndim() == 0)
+    throw std::runtime_error("export_rows: rank must be nonzero" + t);
+  int d = normalize_dim(dim, cache.ndim(), "export_rows", t);
+  int64_t old_seq = cache.shape[d];
+  if (start < 0 || len < 0 || start > old_seq || len > old_seq - start)
+    throw std::runtime_error("export_rows: invalid span" + t);
+  Shape out_shape = cache.shape;  // BWD-F3 E4: the output's byte bound in the preflight (cannot fire: len <= old_seq)
+  out_shape[d] = len;
+  preflight_out_bound("export_rows", out_shape, cache.dtype, t);
   return d;
 }
 
 NDArray export_rows(const NDArray& cache, int dim, int64_t start,
                     int64_t len) {
-  if (!cache.device.is_cuda())
-    throw std::runtime_error("export_rows: CUDA tensor required");
-  if (cache.ndim() == 0)
-    throw std::runtime_error("export_rows: rank must be nonzero");
-  int d = normalize_dim(dim, cache.ndim(), "export_rows");
+  const int d = export_rows_check(cache, dim, start, len);
   int64_t old_seq = cache.shape[d];
-  if (start < 0 || len < 0 || start + len > old_seq)
-    throw std::runtime_error("export_rows: invalid span");
   Shape out_shape = cache.shape;
   out_shape[d] = len;
   NDArray out(out_shape, cache.dtype, cache.device);
-  int64_t inner_elems = product_dims(cache.shape, d + 1, cache.ndim());
-  int64_t row_bytes = inner_elems * (int64_t)dtype_size(cache.dtype);
+  // BWD-F2 R7: the inner-row byte count is formed only when bytes are copied (then every extent is >= 1 and the
+  // product is bounded by the cache's byte count); an empty export with huge inner extents no longer multiplies.
   int64_t nbytes = out.numel() * (int64_t)dtype_size(cache.dtype);
+  int64_t row_bytes = nbytes > 0 ? product_dims(cache.shape, d + 1, cache.ndim()) * (int64_t)dtype_size(cache.dtype)
+                                 : 0;
   if (nbytes > 0) {
     export_rows_bytes_kernel<<<nblk(nbytes), kT>>>(
         static_cast<uint8_t*>(out.data_ptr()),
@@ -8173,32 +8687,52 @@ NDArray export_rows(const NDArray& cache, int dim, int64_t start,
   return out;
 }
 
-NDArray splice_rows(const NDArray& old_cache, const NDArray& insert,
-                    int dim, int64_t head_tokens, int64_t tail_start) {
-  if (old_cache.dtype != insert.dtype)
-    throw std::runtime_error("splice_rows: dtype mismatch");
-  if (old_cache.device.type != insert.device.type ||
-      old_cache.device.index != insert.device.index)
-    throw std::runtime_error("splice_rows: device mismatch");
+int splice_rows_check(const NDArray& old_cache, const Shape& insert_shape, DType insert_dtype,
+                      const Device& insert_device, int dim, int64_t head_tokens, int64_t tail_start) {
+  const std::string t = " (operand 0 old_cache " + copy_operand_text(old_cache) + ", operand 1 insert " +
+                        bcast_shape_text(insert_shape) + " " + dtype_name(insert_dtype) + " on " +
+                        insert_device.str() + ", dim " + std::to_string(dim) + ", head " +
+                        std::to_string(head_tokens) + ", tail_start " + std::to_string(tail_start) + ")";
+  if (old_cache.dtype != insert_dtype)
+    throw std::runtime_error("splice_rows: dtype mismatch" + t);
+  if (old_cache.device.type != insert_device.type ||
+      old_cache.device.index != insert_device.index)
+    throw std::runtime_error("splice_rows: device mismatch" + t);
   if (!old_cache.device.is_cuda())
-    throw std::runtime_error("splice_rows: CUDA tensors required");
-  if (old_cache.ndim() == 0 || insert.ndim() != old_cache.ndim())
-    throw std::runtime_error("splice_rows: rank mismatch");
-  int d = normalize_dim(dim, old_cache.ndim(), "splice_rows");
+    throw std::runtime_error("splice_rows: CUDA tensors required" + t);
+  if (old_cache.ndim() == 0 || (int)insert_shape.size() != old_cache.ndim())
+    throw std::runtime_error("splice_rows: rank mismatch" + t);
+  int d = normalize_dim(dim, old_cache.ndim(), "splice_rows", t);
   for (int i = 0; i < old_cache.ndim(); ++i) {
-    if (i != d && old_cache.shape[i] != insert.shape[i])
-      throw std::runtime_error("splice_rows: shape mismatch outside splice dim");
+    if (i != d && old_cache.shape[i] != insert_shape[i])
+      throw std::runtime_error("splice_rows: shape mismatch outside splice dim" + t);
   }
   int64_t old_seq = old_cache.shape[d];
-  int64_t insert_seq = insert.shape[d];
   if (head_tokens < 0 || tail_start < head_tokens || tail_start > old_seq)
-    throw std::runtime_error("splice_rows: invalid head/tail");
+    throw std::runtime_error("splice_rows: invalid head/tail" + t);
+  // BWD-F2 R7 (BWDF1R1-F08): the output extent head + insert + (old - tail) as a checked sum, here in the check so a
+  // batched op refuses it before any pair's work (each term is >= 0 after the line above).
   Shape out_shape = old_cache.shape;
-  out_shape[d] = head_tokens + insert_seq + (old_seq - tail_start);
+  out_shape[d] = checked_add3(head_tokens, insert_shape[d], old_seq - tail_start, "splice_rows: the output extent" + t);
+  // BWD-F3 E4 (BWDF1R2-F07): the output's byte bound, here in the check, so a pair op refuses it before any pair's
+  // allocation or launch (before, only the constructor checked it, after earlier pairs had run).
+  preflight_out_bound("splice_rows", out_shape, old_cache.dtype, t);
+  return d;
+}
+
+NDArray splice_rows(const NDArray& old_cache, const NDArray& insert,
+                    int dim, int64_t head_tokens, int64_t tail_start) {
+  const int d = splice_rows_check(old_cache, insert.shape, insert.dtype, insert.device, dim, head_tokens,
+                                  tail_start);
+  int64_t old_seq = old_cache.shape[d];
+  int64_t insert_seq = insert.shape[d];
+  Shape out_shape = old_cache.shape;
+  out_shape[d] = head_tokens + insert_seq + (old_seq - tail_start);  // checked in splice_rows_check
   NDArray out(out_shape, old_cache.dtype, old_cache.device);
-  int64_t inner_elems = product_dims(old_cache.shape, d + 1, old_cache.ndim());
-  int64_t row_bytes = inner_elems * (int64_t)dtype_size(old_cache.dtype);
   int64_t nbytes = out.numel() * (int64_t)dtype_size(old_cache.dtype);
+  // BWD-F2 R7: the inner-row byte count only when bytes are copied (see export_rows).
+  int64_t row_bytes = nbytes > 0
+      ? product_dims(old_cache.shape, d + 1, old_cache.ndim()) * (int64_t)dtype_size(old_cache.dtype) : 0;
   if (nbytes > 0) {
     splice_rows_bytes_kernel<<<nblk(nbytes), kT>>>(
         static_cast<uint8_t*>(out.data_ptr()),
@@ -8211,17 +8745,27 @@ NDArray splice_rows(const NDArray& old_cache, const NDArray& insert,
   return out;
 }
 
-NDArray evict_rows(const NDArray& old_cache, int dim, int64_t head_tokens,
-                   int64_t drop_tokens) {
+int evict_rows_check(const NDArray& old_cache, int dim, int64_t head_tokens, int64_t drop_tokens) {
+  const std::string t = " (operand 0 old_cache " + copy_operand_text(old_cache) + ", dim " + std::to_string(dim) +
+                        ", head " + std::to_string(head_tokens) + ", drop " + std::to_string(drop_tokens) + ")";
   if (!old_cache.device.is_cuda())
-    throw std::runtime_error("evict_rows: CUDA tensor required");
+    throw std::runtime_error("evict_rows: CUDA tensor required" + t);
   if (old_cache.ndim() == 0)
-    throw std::runtime_error("evict_rows: rank must be nonzero");
-  int d = normalize_dim(dim, old_cache.ndim(), "evict_rows");
+    throw std::runtime_error("evict_rows: rank must be nonzero" + t);
+  int d = normalize_dim(dim, old_cache.ndim(), "evict_rows", t);
   int64_t old_seq = old_cache.shape[d];
   if (head_tokens < 0 || drop_tokens < 0 || head_tokens > old_seq ||
       drop_tokens > old_seq - head_tokens)
-    throw std::runtime_error("evict_rows: drop exceeds live tail");
+    throw std::runtime_error("evict_rows: drop exceeds live tail" + t);
+  Shape out_shape = old_cache.shape;  // BWD-F3 E4: the output's byte bound (cannot fire: the extent only shrinks)
+  out_shape[d] = old_seq - drop_tokens;
+  preflight_out_bound("evict_rows", out_shape, old_cache.dtype, t);
+  return d;
+}
+
+NDArray evict_rows(const NDArray& old_cache, int dim, int64_t head_tokens,
+                   int64_t drop_tokens) {
+  const int d = evict_rows_check(old_cache, dim, head_tokens, drop_tokens);
   Shape insert_shape = old_cache.shape;
   insert_shape[d] = 0;
   NDArray empty(insert_shape, old_cache.dtype, old_cache.device);
@@ -8257,18 +8801,84 @@ __global__ void rope_kernel(const T* __restrict__ x, const T* __restrict__ cs,
   st<T>(y, i, xv * ld<T>(cs, t) + xr * ld<T>(sn, t) * sin_sign);
 }
 
+// BWD-F2 R3 (review BWDF1R1-F01, F05): the one validator of the RoPE tables, shared by rope_apply, export_rope_rows,
+// the export and swap preflights and (through swap) the arena path. The kernels read rows [pos0, pos0 + rows) of BOTH
+// tables at (pos0 + l) * D + d, so both tables must be (T, D) with T covering that span. Terms, in order, each with
+// the caller's old text as the message prefix and `ctx` (the operand shapes, positions, pair) after it:
+//  * dtype equality with the data (Build B's term, always);
+//  * shape: both tables rank 2 with D columns (Build B checked cos's rank; sin's shape[1] was read on any rank);
+//  * span, with subtraction-based bounds: 0 <= pos0, pos0 <= T and rows <= T - pos0 for cos AND sin (Build B checked
+//    pos0 + L <= cos rows only, so a shorter sin table was read past its end and a negative pos0 read before both);
+//  * only when the kernel will read (`reads`): both tables on the data's device, and a supported floating dtype (the
+//    launch dtype DISPATCH_FLOAT would refuse after allocating). An empty call reads nothing and keeps Build B's
+//    result (R1's rule: dtype and device terms only where bytes are read).
+// (BWD-F2 held the rank, shape and span terms for every call, as R1 keeps rank and extent checks for every operand;
+// BWD-F3 moves the span under `reads`, E1, and widens the rank term, E2.)
+// BWD-F3 (review BWDF1R2-F01, F02, F08), the terms now, in order:
+//  * dtype equality with the data, for every call (D1: a RoPE table's floating dtype must match the data's; this
+//    closes F08 by ruling and is Build B's term too);
+//  * layout (E2, F02): each table is a contiguous (T, D) storage: rank 2, or a rank above 2 whose extra (trailing)
+//    extents are all 1, with D columns. The kernels index the flattened storage at (pos0 + l) * D + d, which is the
+//    same element for [T, D] and [T, D, 1, ...] (NDArray storage is always contiguous). Ranks below 2, and extra
+//    extents other than 1, are refused. Build B read sin's [T, D, 1] correctly and refused cos's; both are accepted;
+//  * span (E1, F01), only when the kernel reads (`reads`: the launch has elements): the read rows [pos0, pos0 + rows)
+//    lie in both tables, with subtraction-based bounds. An empty launch (rows = 0, D = 0 or an empty outer extent)
+//    reads no table row and passes whatever the tables' lengths and pos0 (BWD-F2 refused it when a table was short);
+//  * device and launch dtype, only when the kernel reads (BWD-F2's R1 terms, unchanged).
+// The span term is unchanged for every launch that reads, so every refusal and result with elements is BWD-F2's.
+// Prior art: the RoPE formulation (Su et al., 2021, "RoFormer: Enhanced Transformer with Rotary Position Embedding"),
+// whose cos/sin tables are indexed by absolute position; taken as the read pattern. Subtraction-based bounds: CERT
+// INT30-C/INT32-C style (unverified -- lead to check). The trailing-singleton layout rule: NumPy's squeeze of
+// size-one axes leaves the same contiguous buffer (no specific prior art known to me for its use here). Ours: the
+// shared validator, its term order and the reads condition on the span.
+static bool rope_table_layout_ok(const NDArray& t, int64_t D) {
+  // BWD-F4 H2 (review BWDF1R3-F02): a table above the engine's rank ceiling is refused (ruling D1: TC_MAX_DIMS = 8),
+  // so [T, D, 1, 1, 1, 1, 1, 1, 1] (rank 9) is no longer accepted by the trailing-singleton rule. Rank 8 and below
+  // are unchanged. No prior art known to me (the ceiling is this engine's own D1 ruling).
+  if (t.ndim() < 2 || t.ndim() > TC_MAX_DIMS || t.shape[1] != D) return false;
+  for (int i = 2; i < t.ndim(); ++i)
+    if (t.shape[i] != 1) return false;
+  return true;
+}
+
+static void rope_tables_check(const char* op, const char* xname, DType xdtype, const Device& xdevice, int64_t D,
+                       int64_t rows, int64_t pos0, const NDArray& cs, const NDArray& sn, bool reads,
+                       const std::string& ctx) {
+  const std::string o(op);
+  if (cs.dtype != xdtype || sn.dtype != xdtype)
+    throw std::runtime_error(o + ": table/" + xname + " dtype mismatch" + ctx);
+  if (!rope_table_layout_ok(cs, D) || !rope_table_layout_ok(sn, D))
+    throw std::runtime_error(o + ": tables must be (T, D)" + ctx);
+  if (reads && (pos0 < 0 || rows < 0 || pos0 > cs.shape[0] || rows > cs.shape[0] - pos0 || pos0 > sn.shape[0] ||
+                rows > sn.shape[0] - pos0))
+    throw std::runtime_error(o + ": position past table end" + ctx);
+  if (reads && (!same_device(cs.device, xdevice) || !same_device(sn.device, xdevice)))
+    throw std::runtime_error(o + ": tables must be on the " + xname + "'s device" + ctx);
+  if (reads && !float_dtype(xdtype))
+    throw std::runtime_error(o + ": op supports float32/float16/bfloat16 only" + ctx);
+}
+
+static std::string rope_ctx(const char* xname, const NDArray& x, const NDArray& cs, const NDArray& sn, int64_t pos0) {
+  return std::string(" (") + xname + " " + copy_operand_text(x) + ", cos " + copy_operand_text(cs) + ", sin " +
+         copy_operand_text(sn) + ", pos0 " + std::to_string(pos0) + ")";
+}
+
+// rope_apply's own refusals (Build B's texts), then the shared table validator; used by rope_apply and by the swap
+// preflight on each rope insert, so both refuse the same inputs with the same texts.
+static void rope_apply_check(const NDArray& x, const NDArray& cs, const NDArray& sn, int64_t pos0) {
+  if (x.ndim() < 2) throw std::runtime_error("rope_apply needs >=2D input" + rope_ctx("x", x, cs, sn, pos0));
+  const int64_t D = x.shape[x.ndim() - 1], L = x.shape[x.ndim() - 2];
+  if (D % 2) throw std::runtime_error("rope_apply: odd head_dim" + rope_ctx("x", x, cs, sn, pos0));
+  rope_tables_check("rope_apply", "x", x.dtype, x.device, D, L, pos0, cs, sn, x.numel() > 0,
+                    rope_ctx("x", x, cs, sn, pos0));
+  preflight_out_bound("rope_apply", x.shape, x.dtype, rope_ctx("x", x, cs, sn, pos0));  // BWD-F3 E4 (output = x)
+}
+
 NDArray rope_apply(const NDArray& x, const NDArray& cs, const NDArray& sn,
                    int64_t pos0, bool inverse, bool pair_swap) {
-  if (x.ndim() < 2) throw std::runtime_error("rope_apply needs >=2D input");
+  rope_apply_check(x, cs, sn, pos0);  // BWD-F2 R3: every term before the allocation
   int64_t D = x.shape[x.ndim() - 1];
   int64_t L = x.shape[x.ndim() - 2];
-  if (D % 2) throw std::runtime_error("rope_apply: odd head_dim");
-  if (cs.dtype != x.dtype || sn.dtype != x.dtype)
-    throw std::runtime_error("rope_apply: table/x dtype mismatch");
-  if (cs.ndim() != 2 || cs.shape[1] != D || sn.shape[1] != D)
-    throw std::runtime_error("rope_apply: tables must be (T, D)");
-  if (pos0 + L > cs.shape[0])
-    throw std::runtime_error("rope_apply: position past table end");
   NDArray out(x.shape, x.dtype, x.device);
   int64_t n = x.numel();
   if (n) {
@@ -8307,28 +8917,45 @@ __global__ void export_rope_rows_kernel(
   st<T>(out, i, xv * ld<T>(cs, t) + xr * ld<T>(sn, t) * sin_sign);
 }
 
+// BWD-F1 Amendment 1 C2: export_rope_rows copies cache rows with the rope tables. Added terms (before: unchecked):
+// sn rank 2 (sn.shape[1] was read on any rank), sn rows covering the span like cs's (a shorter sn was read past its
+// end), and the tables on the cache's device. Old message texts are the prefixes, followed by the operand shapes.
+int export_rope_rows_check(const NDArray& cache, const NDArray& cs, const NDArray& sn, int dim, int64_t start,
+                           int64_t len, int64_t pos0) {
+  const std::string t = " (operand 0 cache " + copy_operand_text(cache) + ", operand 1 cos " + copy_operand_text(cs) +
+                        ", operand 2 sin " + copy_operand_text(sn) + ", dim " + std::to_string(dim) + ", start " +
+                        std::to_string(start) + ", length " + std::to_string(len) + ", pos0 " +
+                        std::to_string(pos0) + ")";
+  if (!cache.device.is_cuda())
+    throw std::runtime_error("export_rope_rows: CUDA tensor required" + t);
+  if (cache.ndim() < 2)
+    throw std::runtime_error("export_rope_rows: needs >=2D input" + t);
+  int d = normalize_dim(dim, cache.ndim(), "export_rope_rows", t);
+  if (d != cache.ndim() - 2)
+    throw std::runtime_error("export_rope_rows: seq dim must be -2" + t);
+  int64_t D = cache.shape[cache.ndim() - 1];
+  int64_t old_seq = cache.shape[d];
+  if (D % 2) throw std::runtime_error("export_rope_rows: odd head_dim" + t);
+  if (start < 0 || len < 0 || start > old_seq || len > old_seq - start)
+    throw std::runtime_error("export_rope_rows: invalid span" + t);
+  // BWD-F2 R3: the shared table validator (same terms as BWD-F1's, plus the launch dtype; the device term now applies
+  // only when the export reads, which restores Build B's (0, 0, 2) result for an empty export with a host table, R1).
+  // The export reads when its output has elements: the cache's shape with the seq extent replaced by len.
+  Shape out_shape = cache.shape;
+  out_shape[d] = len;
+  rope_tables_check("export_rope_rows", "cache", cache.dtype, cache.device, D, len, pos0, cs, sn,
+                    numel_of(out_shape) > 0, t);
+  preflight_out_bound("export_rope_rows", out_shape, cache.dtype, t);  // BWD-F3 E4 (cannot fire: len <= old_seq)
+  return d;
+}
+
 NDArray export_rope_rows(const NDArray& cache, const NDArray& cs,
                          const NDArray& sn, int dim, int64_t start,
                          int64_t len, int64_t pos0, bool inverse,
                          bool pair_swap) {
-  if (!cache.device.is_cuda())
-    throw std::runtime_error("export_rope_rows: CUDA tensor required");
-  if (cache.ndim() < 2)
-    throw std::runtime_error("export_rope_rows: needs >=2D input");
-  int d = normalize_dim(dim, cache.ndim(), "export_rope_rows");
-  if (d != cache.ndim() - 2)
-    throw std::runtime_error("export_rope_rows: seq dim must be -2");
+  const int d = export_rope_rows_check(cache, cs, sn, dim, start, len, pos0);
   int64_t D = cache.shape[cache.ndim() - 1];
   int64_t old_seq = cache.shape[d];
-  if (D % 2) throw std::runtime_error("export_rope_rows: odd head_dim");
-  if (start < 0 || len < 0 || start + len > old_seq)
-    throw std::runtime_error("export_rope_rows: invalid span");
-  if (cache.dtype != cs.dtype || cache.dtype != sn.dtype)
-    throw std::runtime_error("export_rope_rows: table/cache dtype mismatch");
-  if (cs.ndim() != 2 || cs.shape[1] != D || sn.shape[1] != D)
-    throw std::runtime_error("export_rope_rows: tables must be (T, D)");
-  if (pos0 < 0 || pos0 + len > cs.shape[0])
-    throw std::runtime_error("export_rope_rows: position past table end");
   Shape out_shape = cache.shape;
   out_shape[d] = len;
   NDArray out(out_shape, cache.dtype, cache.device);
@@ -8351,6 +8978,11 @@ std::tuple<NDArray, NDArray> export_row_pair(
     const NDArray& sn, int raw_dim, int rope_dim, int64_t raw_start,
     int64_t rope_start, int64_t len, int64_t pos0, bool inverse,
     bool pair_swap) {
+  // BWD-F2 R3 (review BWDF1R1-F05): a pair op validates both sides before any work. Before, the raw export ran (and
+  // allocated and launched) before the RoPE side was checked. Prior art: the check-then-act split (no specific prior
+  // art known to me). Ours: its use here.
+  export_rows_check(raw_cache, raw_dim, raw_start, len);
+  export_rope_rows_check(rope_cache, cs, sn, rope_dim, rope_start, len, pos0);
   NDArray raw = export_rows(raw_cache, raw_dim, raw_start, len);
   NDArray rope = export_rope_rows(
       rope_cache, cs, sn, rope_dim, rope_start, len, pos0, inverse,
@@ -8370,6 +9002,13 @@ std::tuple<std::vector<NDArray>, std::vector<NDArray>> export_row_pairs(
       rope_starts.size() != n) {
     throw std::runtime_error("export_row_pairs: input list size mismatch");
   }
+  // BWD-F1 Amendment 1 C2: every pair's checks before any pair's allocation or launch. BWD-F2: the RoPE check now
+  // carries the launch dtype (R3, F05), and a refusal names the pair (R10, F11).
+  for (size_t i = 0; i < n; ++i)
+    with_index("pair", i, n, [&] {
+      export_rows_check(raw_caches[i], raw_dim, raw_starts[i], len);
+      export_rope_rows_check(rope_caches[i], cs, sn, rope_dim, rope_starts[i], len, pos0);
+    });
   std::vector<NDArray> raw_out;
   std::vector<NDArray> rope_out;
   raw_out.reserve(n);
@@ -8396,6 +9035,20 @@ std::tuple<std::vector<NDArray>, std::vector<NDArray>> swap_row_pairs_with_rope(
       rope_inserts.size() != n) {
     throw std::runtime_error("swap_row_pairs_with_rope: input list size mismatch");
   }
+  // BWD-F1 Amendment 1 C2: every pair's checks before any pair's allocation or launch: both splices, and rope_apply's
+  // own refusal conditions for the rope insert (the same terms and texts as rope_apply, which still checks them; the
+  // rope insert keeps its input's shape, dtype and device, so the rope splice is checked on the input).
+  // BWD-F2 R3 (review BWDF1R1-F01, F05): the rope insert goes through rope_apply's own check (the shared table
+  // validator: both tables' read spans, shape, device and launch dtype), not a partial copy of it; R10: a refusal
+  // names the pair.
+  for (size_t i = 0; i < n; ++i)
+    with_index("pair", i, n, [&] {
+      splice_rows_check(raw_caches[i], raw_inserts[i].shape, raw_inserts[i].dtype, raw_inserts[i].device, raw_dim,
+                        head_tokens, tail_start);
+      const NDArray& x = rope_inserts[i];
+      rope_apply_check(x, cs, sn, pos0);
+      splice_rows_check(rope_caches[i], x.shape, x.dtype, x.device, rope_dim, head_tokens, tail_start);
+    });
   std::vector<NDArray> raw_out;
   std::vector<NDArray> rope_out;
   raw_out.reserve(n);
@@ -8419,6 +9072,12 @@ std::tuple<std::vector<NDArray>, std::vector<NDArray>> evict_row_pairs(
   if (rope_caches.size() != n) {
     throw std::runtime_error("evict_row_pairs: input list size mismatch");
   }
+  // BWD-F1 Amendment 1 C2: every pair's checks before any pair's allocation or launch.
+  for (size_t i = 0; i < n; ++i)
+    with_index("pair", i, n, [&] {  // BWD-F2 R10: a refusal names the pair
+      evict_rows_check(raw_caches[i], raw_dim, head_tokens, drop_tokens);
+      evict_rows_check(rope_caches[i], rope_dim, head_tokens, drop_tokens);
+    });
   std::vector<NDArray> raw_out;
   std::vector<NDArray> rope_out;
   raw_out.reserve(n);
@@ -8455,30 +9114,44 @@ arena_row_pair_transaction(
   if (raw_inserts.size() != layers || rope_inserts.size() != layers) {
     throw std::runtime_error("arena_row_pair_transaction: insert list size mismatch");
   }
+  // BWD-F2 R10 (BWDF1R1-F11): dim refusals name the layer and the insert's shape (old texts are the prefixes).
+  auto ins_text = [&](const char* which, size_t i, const NDArray& a) {
+    return std::string(" (layer ") + std::to_string(i) + " of " + std::to_string(layers) + ", " + which +
+           " insert " + copy_operand_text(a) + ")";
+  };
   int rd = normalize_dim(raw_dim, raw_inserts[0].ndim(),
-                         "arena_row_pair_transaction raw");
+                         "arena_row_pair_transaction raw", ins_text("raw", 0, raw_inserts[0]));
   int pd = normalize_dim(rope_dim, rope_inserts[0].ndim(),
-                         "arena_row_pair_transaction rope");
+                         "arena_row_pair_transaction rope", ins_text("rope", 0, rope_inserts[0]));
   int64_t mount_tokens = raw_inserts[0].shape[rd];
   if (mount_tokens < 0 || mount_tokens > arena_width) {
-    throw std::runtime_error("arena_row_pair_transaction: mount exceeds arena width");
+    throw std::runtime_error("arena_row_pair_transaction: mount exceeds arena width" +
+                             ins_text("raw", 0, raw_inserts[0]) + ", arena width " + std::to_string(arena_width));
   }
   if (rope_inserts[0].shape[pd] != mount_tokens) {
-    throw std::runtime_error("arena_row_pair_transaction: insert token mismatch");
+    throw std::runtime_error("arena_row_pair_transaction: insert token mismatch" +
+                             ins_text("rope", 0, rope_inserts[0]) + ", mount " + std::to_string(mount_tokens));
   }
   for (size_t i = 1; i < layers; ++i) {
     int rdi = normalize_dim(raw_dim, raw_inserts[i].ndim(),
-                            "arena_row_pair_transaction raw");
+                            "arena_row_pair_transaction raw", ins_text("raw", i, raw_inserts[i]));
     int pdi = normalize_dim(rope_dim, rope_inserts[i].ndim(),
-                            "arena_row_pair_transaction rope");
+                            "arena_row_pair_transaction rope", ins_text("rope", i, rope_inserts[i]));
     if (raw_inserts[i].shape[rdi] != mount_tokens ||
         rope_inserts[i].shape[pdi] != mount_tokens) {
-      throw std::runtime_error("arena_row_pair_transaction: layer token mismatch");
+      throw std::runtime_error("arena_row_pair_transaction: layer token mismatch" + ins_text("raw", i, raw_inserts[i]) +
+                               "," + ins_text("rope", i, rope_inserts[i]) + ", mount " + std::to_string(mount_tokens));
     }
   }
+  // BWD-F2 R7 (review BWDF1R1-F08): validate the arena span before forming tail_start = sink + current mount (both
+  // are >= 0 here; their sum overflowed int64 unchecked before). The swap's preflight then checks the span against
+  // every cache. Prior art: GCC's __builtin_add_overflow (2015); ours: the placement.
+  const int64_t tail_start = checked_add3(sink_tokens, current_mount_tokens, 0,
+                                          "arena_row_pair_transaction: sink_tokens " + std::to_string(sink_tokens) +
+                                              " + current_mount_tokens " + std::to_string(current_mount_tokens));
   auto out = swap_row_pairs_with_rope(
       raw_caches, rope_caches, raw_inserts, rope_inserts, cs, sn, raw_dim,
-      rope_dim, sink_tokens, sink_tokens + current_mount_tokens, sink_tokens,
+      rope_dim, sink_tokens, tail_start, sink_tokens,
       pair_swap);
   return std::make_tuple(std::get<0>(out), std::get<1>(out), mount_tokens);
 }

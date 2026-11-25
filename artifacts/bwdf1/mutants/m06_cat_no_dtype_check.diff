@@ -1,0 +1,13 @@
+--- E/tensor_cuda/src/kernels.cu
++++ m06_cat_no_dtype_check/tensor_cuda/src/kernels.cu
+@@ -1636,9 +1636,7 @@
+                                  std::to_string(a0.shape[k]) +
+                                  (all_extents ? "; every shape must be equal" : "; extents must match outside dim " +
+                                                                                     std::to_string(d)) + pair);
+-    if (a.dtype != a0.dtype)
+-      throw std::runtime_error(std::string(op) + ": operand " + std::to_string(i) + " has dtype " +
+-                               dtype_name(a.dtype) + " but operand 0 has " + dtype_name(a0.dtype) + pair);
++    // MUTANT m06_cat_no_dtype_check: the dtype check is deleted
+     if (!same_device(a.device, a0.device))
+       throw std::runtime_error(std::string(op) + ": operand " + std::to_string(i) + " is on " + a.device.str() +
+                                " but operand 0 is on " + a0.device.str() + pair);

@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -1569,7 +1569,7 @@
+   if (idx >= n) return;
+   int64_t rem = idx, co = 0, xo = 0, yo = 0;
+   for (int d = 0; d < s.ndim; ++d) { int64_t cc = rem / s.out_str[d]; rem -= cc * s.out_str[d]; co += cc * s.c_str[d]; xo += cc * s.x_str[d]; yo += cc * s.y_str[d]; }
+-  st<T>(out, idx, cond_at<C>(c, co) ? ld<T>(x, xo) : ld<T>(y, yo));
++  st<T>(out, idx, ld<T>(reinterpret_cast<const T*>(c), co) != 0.f ? ld<T>(x, xo) : ld<T>(y, yo));  // MUTANT n05_condition_as_data_dtype
+ }
+ }  // namespace
+ 

@@ -1,0 +1,14 @@
+--- E/tc_signal/tc_signal/__init__.py
++++ m04_h1_dropped/tc_signal/tc_signal/__init__.py
+@@ -84,10 +84,7 @@
+         # Prior art: PyTorch refuses an out= tensor that requires grad under grad mode ("functions with out=...
+         # arguments don't support automatic differentiation"); unverified -- lead to check. Ours: the reuse of the
+         # refused ops' rule.
+-        destinations = out if isinstance(out, (tuple, list)) else (out,)
+-        if _grad_context(destinations) is not None:
+-            raise RuntimeError(f"tc_signal: {name}: out cannot require grad")
+-        return None
++        return None  # MUTANT m04_h1_dropped
+     if out is not None:
+         raise ValueError(f"tc_signal: {name}: out= is unsupported when recording gradients")
+     if any(x is not None and not issubclass(type(x), tc.Tensor) for x in inputs):

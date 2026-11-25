@@ -1,0 +1,141 @@
+{
+ "written_utc": "2026-11-24T14:18:53.539540+00:00",
+ "order": "orders/ENG5ST_REGRESSION_TEST.md (T2)",
+ "cwd": "this worktree's root (tensor_fork_apa_wt_eng5s)",
+ "environment": "the lead's environment with the GPU visible; no ENG5-S-T script removes or overrides CUDA_VISIBLE_DEVICES (the step refuses with exit 7 if it is empty)",
+ "lease_check": "scripts/eng5st_gpu_step.py:2 (forge-gpu-lease-check --require-held); the test file itself calls no lease check (its children run inside the step's lease)",
+ "pre_lease_check": "scripts/eng5st_line.py run <arm> (module sha256 against the receipt, write-once directory) runs before the forge command; the step repeats both inside the lease (scripts/eng5st_common.py run_arm) before it starts pytest",
+ "post_device_steps": "scripts/eng5st_verdict.py judge (written by the step as VERDICT.json); T3 drive: artifacts/eng5s/t/T3_VERDICT_DRIVE.json",
+ "expected": {
+  "S": "PASS (all eleven GPU rows pass)",
+  "B": "DEFECT (all ten injected rows fail; axpy_empty passes)",
+  "s01": "KILLED (clone only)",
+  "s02": "KILLED (to_d2h and to_h2d)",
+  "s03": "KILLED (zeros)",
+  "s04": "KILLED (from_host)"
+ },
+ "semantic_verdict": "each line's VERDICT.json decides it; RESULT_T.json ran_clean only records the exits; exit 124 is never a pass (L45)",
+ "multi_device": "NOT COVERED (one GPU)",
+ "lines": [
+  {
+   "arm": "S",
+   "package": "tensor_cuda/build-eng5s/S/pkg",
+   "module_sha256": "6b81f0c6ce16e679fcd285fea37041ebfbf9e6f4798c3c85568985cc9e8c3f44",
+   "module_check_at_staging": "ok",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng5st-S -- timeout 480s python3 -B -P scripts/eng5st_gpu_step.py S",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "expected_verdict": "PASS",
+   "expected_kill_rows": null,
+   "lead_command": "python3 -B -P scripts/eng5st_line.py run S",
+   "write_once_paths": [
+    "artifacts/eng5s/t/gpu/S/ (made by the step)",
+    "artifacts/eng5s/t/gpu_run/S/ (made by the runner)",
+    "/tmp/eng5st_tmp/pt/gpu_S (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/t/gpu_dry/S.json"
+  },
+  {
+   "arm": "B",
+   "package": "tensor_cuda/build-eng5s/B/pkg",
+   "module_sha256": "1ebc3d9b4610b6812ccd96cb3462931b807ef1a99de7b41c2c9f5e9ec12e86eb",
+   "module_check_at_staging": "ok",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng5st-B -- timeout 480s python3 -B -P scripts/eng5st_gpu_step.py B",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "expected_verdict": "DEFECT",
+   "expected_kill_rows": null,
+   "lead_command": "python3 -B -P scripts/eng5st_line.py run B",
+   "write_once_paths": [
+    "artifacts/eng5s/t/gpu/B/ (made by the step)",
+    "artifacts/eng5s/t/gpu_run/B/ (made by the runner)",
+    "/tmp/eng5st_tmp/pt/gpu_B (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/t/gpu_dry/B.json"
+  },
+  {
+   "arm": "s01",
+   "package": "tensor_cuda/build-eng5s/s01_clone_status_dropped/pkg",
+   "module_sha256": "3ef192348976f4f5a32cce770a86ce30df8e8d5291b71a1efdf64ae0128632b9",
+   "module_check_at_staging": "ok",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng5st-s01 -- timeout 480s python3 -B -P scripts/eng5st_gpu_step.py s01",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "expected_verdict": "KILLED",
+   "expected_kill_rows": "clone",
+   "lead_command": "python3 -B -P scripts/eng5st_line.py run s01",
+   "write_once_paths": [
+    "artifacts/eng5s/t/gpu/s01/ (made by the step)",
+    "artifacts/eng5s/t/gpu_run/s01/ (made by the runner)",
+    "/tmp/eng5st_tmp/pt/gpu_s01 (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/t/gpu_dry/s01.json"
+  },
+  {
+   "arm": "s02",
+   "package": "tensor_cuda/build-eng5s/s02_to_status_dropped/pkg",
+   "module_sha256": "592400d56081aa2e3cfd66ecd005b3986c4fb825b03e51e94924dd7255e4e2c0",
+   "module_check_at_staging": "ok",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng5st-s02 -- timeout 480s python3 -B -P scripts/eng5st_gpu_step.py s02",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "expected_verdict": "KILLED",
+   "expected_kill_rows": "to_d2h and to_h2d (both directions of `to`)",
+   "lead_command": "python3 -B -P scripts/eng5st_line.py run s02",
+   "write_once_paths": [
+    "artifacts/eng5s/t/gpu/s02/ (made by the step)",
+    "artifacts/eng5s/t/gpu_run/s02/ (made by the runner)",
+    "/tmp/eng5st_tmp/pt/gpu_s02 (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/t/gpu_dry/s02.json"
+  },
+  {
+   "arm": "s03",
+   "package": "tensor_cuda/build-eng5s/s03_zeros_status_dropped/pkg",
+   "module_sha256": "344e7a1f775683eaa53bf4ad329d69f39d056dbbb54ef2b78514a441ef297cf9",
+   "module_check_at_staging": "ok",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng5st-s03 -- timeout 480s python3 -B -P scripts/eng5st_gpu_step.py s03",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "expected_verdict": "KILLED",
+   "expected_kill_rows": "zeros",
+   "lead_command": "python3 -B -P scripts/eng5st_line.py run s03",
+   "write_once_paths": [
+    "artifacts/eng5s/t/gpu/s03/ (made by the step)",
+    "artifacts/eng5s/t/gpu_run/s03/ (made by the runner)",
+    "/tmp/eng5st_tmp/pt/gpu_s03 (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/t/gpu_dry/s03.json"
+  },
+  {
+   "arm": "s04",
+   "package": "tensor_cuda/build-eng5s/s04_from_host_last_error_only/pkg",
+   "module_sha256": "9e83c5b6914c59711ab3cccd74c829082888ef07305109c52833adc6aa7f4071",
+   "module_check_at_staging": "ok",
+   "forge_command": "forge-gpu-run --min 120 --max 540 --label eng5st-s04 -- timeout 480s python3 -B -P scripts/eng5st_gpu_step.py s04",
+   "min_s": 120,
+   "max_s": 540,
+   "inner_timeout_s": 480,
+   "expected_verdict": "KILLED",
+   "expected_kill_rows": "from_host",
+   "lead_command": "python3 -B -P scripts/eng5st_line.py run s04",
+   "write_once_paths": [
+    "artifacts/eng5s/t/gpu/s04/ (made by the step)",
+    "artifacts/eng5s/t/gpu_run/s04/ (made by the runner)",
+    "/tmp/eng5st_tmp/pt/gpu_s04 (pytest basetemp)"
+   ],
+   "dry_run_exit": 78,
+   "dry_run_receipt": "artifacts/eng5s/t/gpu_dry/s04.json"
+  }
+ ]
+}

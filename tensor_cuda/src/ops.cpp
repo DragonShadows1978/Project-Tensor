@@ -784,9 +784,19 @@ NDArray matmul_backward(const NDArray& a, const NDArray& b, float alpha, bool tr
   // Preserve the engine's existing lower-precision behavior.
   if (a.dtype != DType::Float32) return tc::matmul(a, b, alpha, trans_b);
   const int na = a.ndim(), nb = b.ndim();
+  // BWD-F1 H3 (audit BWDA-F08): the messages below name both GEMM operands (left = the first argument, right = the
+  // second) with shape, dtype and device; the old text stays as each message's prefix. Messages only.
+  const auto operands = [&] {
+    const auto describe = [](const NDArray& x) {
+      std::string t = "[";
+      for (size_t i = 0; i < x.shape.size(); ++i) t += (i ? ", " : "") + std::to_string(x.shape[i]);
+      return t + "] " + dtype_name(x.dtype) + " on " + x.device.str();
+    };
+    return " (left operand " + describe(a) + ", right operand " + describe(b) + ")";
+  };
   if (na < 2 || nb < 2 || b.dtype != a.dtype || !a.device.is_cuda() ||
       !b.device.is_cuda() || a.device.index != b.device.index)
-    throw std::runtime_error("matmul backward: expected same-device CUDA fp32 matrices");
+    throw std::runtime_error("matmul backward: expected same-device CUDA fp32 matrices" + operands());
 
   // ENG4 (M5): one operand predicate with the forward (tc::matmul_operand_plan, matmul.cu). The count-based batch
   // check this replaced accepted equal counts with different batch shapes; the predicate requires equal shapes at
@@ -812,7 +822,8 @@ NDArray matmul_backward(const NDArray& a, const NDArray& b, float alpha, bool tr
   int device;
   check_backward_cuda(cudaGetDevice(&device), "cudaGetDevice");
   if (device != a.device.index)
-    throw std::runtime_error("matmul backward: operands must be on the current CUDA device");
+    throw std::runtime_error("matmul backward: operands must be on the current CUDA device (current device " +
+                             std::to_string(device) + ")" + operands());
   if (!k) return NDArray::zeros(out_shape, a.dtype, a.device);
   NDArray out(out_shape, a.dtype, a.device);
   if (!out.numel()) return out;
@@ -839,9 +850,17 @@ Tensor matmul(const Tensor& a, const Tensor& b, float alpha, bool trans_b) {
       // non-singleton B batch before any CUDA call, this refusal is unreachable through the forward. It stays as a
       // guard in case the forward's contract ever changes.
       if (std::any_of(weight.shape.begin(), weight.shape.end() - 2,
-                      [](int64_t dim) { return dim != 1; }))
+                      [](int64_t dim) { return dim != 1; })) {
+        // BWD-F1 H3 (audit BWDA-F08): name both operands' shapes; the old text stays as the prefix.
+        const auto text = [](const Shape& x) {
+          std::string t = "[";
+          for (size_t i = 0; i < x.size(); ++i) t += (i ? ", " : "") + std::to_string(x[i]);
+          return t + "]";
+        };
         throw std::runtime_error("matmul backward: forward uses stride 0 and only the first B matrix "
-                                 "for unequal ranks with non-singleton B batch dimensions");
+                                 "for unequal ranks with non-singleton B batch dimensions (A " +
+                                 text(a.data().shape) + ", B " + text(weight.shape) + ")");
+      }
       weight = weight.reshape(Shape(weight.shape.end() - 2, weight.shape.end()));
     }
     // C = alpha * A @ op(B).  dA = alpha * g @ op(B)^T: trans_b flips, reusing
@@ -1035,9 +1054,39 @@ Tensor sum(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
 }
 Tensor mean(const Tensor& a, const std::vector<int>& axes, bool keepdim) {
   int64_t cnt = 1;
-  int nd = a.ndim();
-  if (axes.empty()) cnt = a.data().numel();
-  else for (int ax : axes) { int d = ax < 0 ? ax + nd : ax; cnt *= a.shape()[d]; }
+  // BWD-F3 E3 (review BWDF1R2-F06 and its successor "mean computes unchecked geometry"): the axes are normalized,
+  // range-checked and refused when repeated (NumPy's rule, tc::normalize_reduce_axes) before the count below reads
+  // a.shape()[d]. Before, mean([5]) on a rank-1 tensor read the shape vector past its end, and mean([0, 0]) counted
+  // the axis twice, before sum's own checks ran. Valid, distinct axes give the same normalized values, so the count
+  // and the result are unchanged. Prior art: NumPy's normalize_axis_tuple ("duplicate value in axis").
+  const std::vector<int> nax = tc::normalize_reduce_axes("mean", axes, a.shape());
+  // BWD-F4 H1 (review BWDF1R3-F01): the count is computed without signed overflow. Before, the selected extents were
+  // multiplied in axis order in int64, so an empty tensor reshaped to [2^32, 2^32, 0, 0] made mean([0, 1, 2])
+  // multiply 2^32 by 2^32 (2^64, signed overflow) before the 0 was reached. Now: decide emptiness first (any
+  // selected extent 0 gives count 0, the value the old product gave whenever it did not overflow), then multiply
+  // with a checked product and refuse an overflowing one before any work (sum below has not run). Every input
+  // whose product does not overflow gets the same count as before. Prior art: GCC's __builtin_mul_overflow (2015);
+  // NumPy's rule that an empty reduction axis gives count 0; the same decide-emptiness-first rule in the reducer
+  // (kernels.cu, BWD-F2 R7) and in P1T-FIX2's numel_of. No other prior art known to me.
+  if (axes.empty()) {
+    cnt = a.data().numel();
+  } else {
+    bool selected_empty = false;
+    for (int d : nax) selected_empty = selected_empty || a.shape()[d] == 0;
+    if (selected_empty) {
+      cnt = 0;
+    } else {
+      for (int d : nax) {
+        if (__builtin_mul_overflow(cnt, a.shape()[d], &cnt)) {
+          std::string st = "[", at = "[";
+          for (size_t i = 0; i < a.shape().size(); ++i) st += (i ? ", " : "") + std::to_string(a.shape()[i]);
+          for (size_t i = 0; i < nax.size(); ++i) at += (i ? ", " : "") + std::to_string(axes[i]);
+          throw std::overflow_error("mean: the reduced element count of " + st + "] overflows int64 (axes " + at +
+                                    "]); refused before any allocation");
+        }
+      }
+    }
+  }
   return mul_scalar(sum(a, axes, keepdim), 1.0 / (double)cnt);
 }
 
@@ -1110,6 +1159,20 @@ Tensor where(const Tensor& cond, const Tensor& x, const Tensor& y) {
   });
 }
 Tensor masked_fill(const Tensor& a, const Tensor& mask, double value) {
+  // BWD-F1 Z2: the where below broadcasts mask against a; check it with NumPy's rule before the fill's allocation (a
+  // CUDA call), so a refusal comes first. Prior art: NumPy's broadcasting rule (kernels.cu broadcast_shape).
+  (void)tc::broadcast_shapes(mask.data().shape, a.data().shape);
+  // BWD-F2 R2: where_nd's Dim3Spec rank, checked before the fill's allocation too. R5 needs nothing here: where_nd
+  // loads the mask in its own dtype (a bool mask is no longer read as a's dtype), and fill and a share a's dtype.
+  {
+    auto text = [](const Shape& s) {
+      std::string t = "[";
+      for (size_t i = 0; i < s.size(); ++i) t += (i ? ", " : "") + std::to_string(s[i]);
+      return t + "]";
+    };
+    tc::check_meta_rank("masked_fill", std::max(mask.data().ndim(), a.data().ndim()),
+                        "mask " + text(mask.data().shape) + ", a " + text(a.data().shape));
+  }
   NDArray fill = NDArray::full(a.shape(), value, a.dtype(), a.device());
   NDArray out = where_nd(mask.data(), fill, a.data());
   NDArray m = mask.data();
@@ -1269,6 +1332,16 @@ Tensor cat(const std::vector<Tensor>& ts, int dim) {
   });
 }
 Tensor stack(const std::vector<Tensor>& ts, int dim) {
+  // BWD-F1 Amendment 1 C2: NumPy's stack rule (every shape equal; dim in [-(ndim+1), ndim]), dtype and device, checked
+  // on the host before any unsqueeze or allocation. Before, an empty list read ts[0] (in cat) and a dim out of range
+  // reached unsqueeze's insert past the end of the shape vector; a mismatch reached cat_nd unchecked.
+  // Prior art: numpy.stack's rules (taken as the reference); ours: the placement.
+  {
+    std::vector<NDArray> datas;
+    datas.reserve(ts.size());
+    for (auto& t : ts) datas.push_back(t.data());
+    (void)tc::check_copy_operands("stack", datas, dim, /*all_extents=*/true);
+  }
   std::vector<Tensor> expanded;
   for (auto& t : ts) expanded.push_back(unsqueeze(t, dim));
   return cat(expanded, dim);

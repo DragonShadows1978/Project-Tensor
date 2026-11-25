@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -1702,7 +1702,7 @@
+   const int d = all_extents ? -1 : (dim < 0 ? dim + nd : dim);
+   // BWD-F2 R2 (BWDF1R1-F02): the rank the copy writes into DimCopySpec, before anything is allocated or written. For
+   // stack that is the rank after its unsqueeze (rank-8 operands stack to rank 9); cat checks its operands' rank.
+-  check_meta_rank(op, nd + (all_extents ? 1 : 0), "operand 0 " + copy_operand_text(a0));
++  // MUTANT n02_no_rank_ceiling_stack: the copy ops' rank ceiling (stack's post-unsqueeze rank) is deleted
+   bool any_elements = a0.numel() > 0;
+   for (size_t i = 1; i < arrs.size(); ++i) {
+     const NDArray& a = arrs[i];

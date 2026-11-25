@@ -1,0 +1,136 @@
+{
+ "arm": "s01",
+ "rows": {
+  "synchronize": {
+   "site": 1,
+   "injected_pass": true,
+   "injected_why": "raised naming the entry, the call and the CUDA error name",
+   "injected_fired": true,
+   "returned_under_fired_injection": false,
+   "injected_outcome": "raised",
+   "injected_message": "cuda_sync: cudaDeviceSynchronize failed: cudaErrorInvalidValue: invalid argument",
+   "control_pass": true,
+   "control_why": "returned"
+  },
+  "oom_drain": {
+   "site": 2,
+   "injected_pass": true,
+   "injected_why": "raised naming the entry, the call and the CUDA error name",
+   "injected_fired": true,
+   "returned_under_fired_injection": false,
+   "injected_outcome": "raised",
+   "injected_message": "Storage (cudaMalloc OOM retry): cudaStreamSynchronize (drain) failed: cudaErrorInvalidValue: invalid argument",
+   "control_pass": true,
+   "control_why": "expected bytes"
+  },
+  "oom_drain_pooled": {
+   "site": 2,
+   "injected_pass": true,
+   "injected_why": "raised naming the entry, the call and the CUDA error name",
+   "injected_fired": true,
+   "returned_under_fired_injection": false,
+   "injected_outcome": "raised",
+   "injected_message": "Storage (cudaMallocAsync OOM retry): cudaStreamSynchronize (drain) failed: cudaErrorInvalidValue: invalid argument",
+   "control_pass": true,
+   "control_why": "expected bytes"
+  },
+  "zeros": {
+   "site": 3,
+   "injected_pass": true,
+   "injected_why": "raised naming the entry, the call and the CUDA error name",
+   "injected_fired": true,
+   "returned_under_fired_injection": false,
+   "injected_outcome": "raised",
+   "injected_message": "NDArray::zeros: cudaMemset failed: cudaErrorInvalidValue: invalid argument",
+   "control_pass": true,
+   "control_why": "expected bytes (all-zero by design; the injected row decides site 3)"
+  },
+  "from_host": {
+   "site": 4,
+   "injected_pass": true,
+   "injected_why": "raised naming the entry, the call and the CUDA error name",
+   "injected_fired": true,
+   "returned_under_fired_injection": false,
+   "injected_outcome": "raised",
+   "injected_message": "NDArray::from_host: cudaMemcpy failed: cudaErrorInvalidValue: invalid argument",
+   "control_pass": true,
+   "control_why": "expected bytes"
+  },
+  "to_host": {
+   "site": 5,
+   "injected_pass": true,
+   "injected_why": "raised naming the entry, the call and the CUDA error name",
+   "injected_fired": true,
+   "returned_under_fired_injection": false,
+   "injected_outcome": "raised",
+   "injected_message": "NDArray::to_host: cudaMemcpy failed: cudaErrorInvalidValue: invalid argument",
+   "control_pass": true,
+   "control_why": "expected bytes"
+  },
+  "clone": {
+   "site": 6,
+   "injected_pass": false,
+   "injected_why": "returned under a fired injection (the failure passed silently)",
+   "injected_fired": true,
+   "returned_under_fired_injection": true,
+   "injected_outcome": "ok",
+   "injected_message": null,
+   "control_pass": true,
+   "control_why": "expected bytes"
+  },
+  "to_d2h": {
+   "site": 7,
+   "injected_pass": true,
+   "injected_why": "raised naming the entry, the call and the CUDA error name",
+   "injected_fired": true,
+   "returned_under_fired_injection": false,
+   "injected_outcome": "raised",
+   "injected_message": "NDArray::to: cudaMemcpy failed: cudaErrorInvalidValue: invalid argument",
+   "control_pass": true,
+   "control_why": "expected bytes"
+  },
+  "to_h2d": {
+   "site": 7,
+   "injected_pass": true,
+   "injected_why": "raised naming the entry, the call and the CUDA error name",
+   "injected_fired": true,
+   "returned_under_fired_injection": false,
+   "injected_outcome": "raised",
+   "injected_message": "NDArray::to: cudaMemcpy failed: cudaErrorInvalidValue: invalid argument",
+   "control_pass": true,
+   "control_why": "expected bytes"
+  },
+  "axpy_": {
+   "site": 8,
+   "injected_pass": true,
+   "injected_why": "raised naming the entry, the call and the CUDA error name",
+   "injected_fired": true,
+   "returned_under_fired_injection": false,
+   "injected_outcome": "raised",
+   "injected_message": "axpy_: cudaMemcpy failed: cudaErrorInvalidValue: invalid argument",
+   "control_pass": true,
+   "control_why": "expected bytes"
+  },
+  "packed_prefill_dump": {
+   "result": "not_applicable",
+   "why": "site 9 runs only in a hooks build; the mutant arms have none"
+  },
+  "axpy_empty": {
+   "site": null,
+   "control_pass": true,
+   "control_why": "returned an empty parameter"
+  }
+ },
+ "missing": [],
+ "mutant_assertion": {
+  "mutant": "s01_clone_status_dropped",
+  "rows": [
+   "clone"
+  ],
+  "name": "clone: Build S's assertion (raise in the S1 form under a fired injection) fails on the mutant: the call returns",
+  "met": true,
+  "executed_marker_lines": 2
+ },
+ "verdict": "KILLED",
+ "line": "g3_s01"
+}

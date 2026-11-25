@@ -1,0 +1,181 @@
+{
+ "m01_max_rule": {
+  "test_file": "tensor_cuda/tests/test_bwdf1_zero_extent.py",
+  "tc_tree": "/tmp/bwdf1_src_m01_max_rule",
+  "ts_tree": "/tmp/bwdf1_src_E",
+  "module_sha256": "45bd820927653450a9066af3085eca8b94e68ab08a1fbde07a146ee48cd34bf9",
+  "pytest_exit": 1,
+  "summary": "559 failed, 912 passed in 8.32s",
+  "expected_killing_tests": {
+   "test_cpu_broadcast_shape_text_equals_numpy[(4, 0)|(4, 1)]": {
+    "outcome": "failed",
+    "message": "AssertionError: ({'case': '(4, 0)|(4, 1)', 'shape': [4, 1]}, [4, 0])\nassert [4, 1] == [4, 0]\n  \n  At index 1 diff: 1 != 0\n  Use -v to get more diff"
+   },
+   "test_cpu_broadcast_shape_text_equals_numpy[(4, 1)|(4, 0)]": {
+    "outcome": "failed",
+    "message": "AssertionError: ({'case': '(4, 1)|(4, 0)', 'shape': [4, 1]}, [4, 0])\nassert [4, 1] == [4, 0]\n  \n  At index 1 diff: 1 != 0\n  Use -v to get more diff"
+   },
+   "test_cpu_broadcast_shape_text_equals_numpy[(0,)|(1,)]": {
+    "outcome": "failed",
+    "message": "AssertionError: ({'case': '(0,)|(1,)', 'shape': [1]}, [0])\nassert [1] == [0]\n  \n  At index 0 diff: 1 != 0\n  Use -v to get more diff"
+   },
+   "test_cpu_broadcast_shape_text_equals_numpy[(2, 1, 0)|(1,)]": {
+    "outcome": "failed",
+    "message": "AssertionError: ({'case': '(2, 1, 0)|(1,)', 'shape': [2, 1, 1]}, [2, 1, 0])\nassert [2, 1, 1] == [2, 1, 0]\n  \n  At index 2 diff: 1 != 0\n  Use -v to get more diff"
+   },
+   "test_cpu_g1_zero_against_one_numpy_shape[add-float32-(4, 0)-(4, 1)]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'calls': 0, 'message': 'ew_binary: operand a [4, 0] has no elements but the output [4, 1] has elements; refused before any launch', 'raised': 'RuntimeError'}\nassert 'RuntimeError' is None"
+   },
+   "test_cpu_g1_zero_against_one_numpy_shape[where_x-float32-(4, 0)-(4, 1)]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'calls': 0, 'message': 'where: operand x [4, 0] has no elements but the output [4, 1] has elements; refused before any launch', 'raised': 'RuntimeError'}\nassert 'RuntimeError' is None"
+   },
+   "test_cpu_g1_zero_against_one_numpy_shape[masked_fill-bfloat16-(4, 0)-(4, 1)]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'calls': 0, 'message': 'where: operand cond [4, 0] has no elements but the output [4, 1] has elements; refused before any launch', 'raised': 'RuntimeError'}\nassert 'RuntimeError' is None"
+   },
+   "test_cpu_g1_zero_against_one_numpy_shape[expand-float32-(4, 1)-(4, 0)]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'calls': 0, 'message': 'ew_binary: operand a [4, 0] has no elements but the output [4, 1] has elements; refused before any launch', 'raised': 'RuntimeError'}\nassert 'RuntimeError' is None"
+   }
+  },
+  "tests_failed_total": 559,
+  "tests_total": 1471,
+  "result": "KILLED"
+ },
+ "m02_no_empty_operand_guard": {
+  "test_file": "tensor_cuda/tests/test_bwdf1_zero_extent.py",
+  "tc_tree": "/tmp/bwdf1_src_m02_no_empty_operand_guard",
+  "ts_tree": "/tmp/bwdf1_src_E",
+  "module_sha256": "456455ad9a4adc8a2100bd0b9b7f6ed7221994bf2673a1d9a5a558e65c807530",
+  "pytest_exit": 1,
+  "summary": "5 failed, 1466 passed in 3.55s",
+  "expected_killing_tests": {
+   "test_cpu_guard_refuses_empty_operand_under_nonempty_output[ew_binary-a-empty-a-[4, 0]-[4, 1]]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'case': 'ew_binary-a-empty', 'raised': None}\nassert None is not None"
+   },
+   "test_cpu_guard_refuses_empty_operand_under_nonempty_output[ew_binary-b-empty-b-[4, 0]-[4, 1]]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'case': 'ew_binary-b-empty', 'raised': None}\nassert None is not None"
+   },
+   "test_cpu_guard_refuses_empty_operand_under_nonempty_output[compare-b-empty-rank1-b-[0]-[3]]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'case': 'compare-b-empty-rank1', 'raised': None}\nassert None is not None"
+   },
+   "test_cpu_guard_refuses_empty_operand_under_nonempty_output[where-x-empty-x-[0]-[2, 3]]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'case': 'where-x-empty', 'raised': None}\nassert None is not None"
+   },
+   "test_cpu_guard_refuses_empty_operand_under_nonempty_output[where-y-empty-y-[2, 0, 3]-[2, 3]]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'case': 'where-y-empty', 'raised': None}\nassert None is not None"
+   }
+  },
+  "tests_failed_total": 5,
+  "tests_total": 1471,
+  "result": "KILLED"
+ },
+ "m03_reduce_gt1": {
+  "test_file": "tensor_cuda/tests/test_bwdf1_zero_extent.py",
+  "tc_tree": "/tmp/bwdf1_src_m03_reduce_gt1",
+  "ts_tree": "/tmp/bwdf1_src_E",
+  "module_sha256": "9e733b34386b0d3b0e9ac73496061ea40f35660fcf743b2838e740378dfdac28",
+  "pytest_exit": 1,
+  "summary": "1 failed, 1470 passed in 3.62s",
+  "expected_killing_tests": {
+   "test_cpu_z3_zero_axis_gradient_reaches_the_sum": {
+    "outcome": "failed",
+    "message": "AssertionError: reshape: element count mismatch\nassert 'element count mismatch' not in 'reshape: el...unt mismatch'\n  \n  'element count mismatch' is contained here:\n    reshape: element count mismatch"
+   }
+  },
+  "tests_failed_total": 1,
+  "tests_total": 1471,
+  "result": "KILLED",
+  "gpu": "staged line g3_m03_reduce_gt1 (G3 rows on the m03 build); lead runs it"
+ },
+ "m04_h1_dropped": {
+  "test_file": "tc_signal/tests/test_bwdf1_hardening.py",
+  "tc_tree": "/tmp/bwdf1_src_E",
+  "ts_tree": "/tmp/bwdf1_src_m04_h1_dropped",
+  "module_sha256": "8b84e5d872e382d3f29360bdf7b7cb253978d41c8a450ee250d168e9999d7f30",
+  "pytest_exit": 1,
+  "summary": "5 failed, 18 passed in 0.57s",
+  "expected_killing_tests": {
+   "test_cpu_h1_frozen_inputs_refuse_destination_requiring_grad[conv1d]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'calls': 0, 'message': '__dlpack_device__: TensorCUDA exports CUDA tensors only; this tensor is on cpu', 'raised': 'BufferError'}\nassert 'BufferError' == 'RuntimeError'\n  \n  - RuntimeError\n  + BufferError"
+   },
+   "test_cpu_h1_frozen_inputs_refuse_destination_requiring_grad[conv_transpose1d]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'calls': 0, 'message': '__dlpack_device__: TensorCUDA exports CUDA tensors only; this tensor is on cpu', 'raised': 'BufferError'}\nassert 'BufferError' == 'RuntimeError'\n  \n  - RuntimeError\n  + BufferError"
+   },
+   "test_cpu_h1_frozen_inputs_refuse_destination_requiring_grad[instance_norm1d]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'calls': 0, 'message': '__dlpack_device__: TensorCUDA exports CUDA tensors only; this tensor is on cpu', 'raised': 'BufferError'}\nassert 'BufferError' == 'RuntimeError'\n  \n  - RuntimeError\n  + BufferError"
+   },
+   "test_cpu_h1_frozen_inputs_refuse_destination_requiring_grad[upsample_nearest1d]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'calls': 0, 'message': '__dlpack_device__: TensorCUDA exports CUDA tensors only; this tensor is on cpu', 'raised': 'BufferError'}\nassert 'BufferError' == 'RuntimeError'\n  \n  - RuntimeError\n  + BufferError"
+   },
+   "test_cpu_h1_frozen_inputs_refuse_destination_requiring_grad[reflection_pad1d]": {
+    "outcome": "failed",
+    "message": "AssertionError: {'calls': 0, 'message': '__dlpack_device__: TensorCUDA exports CUDA tensors only; this tensor is on cpu', 'raised': 'BufferError'}\nassert 'BufferError' == 'RuntimeError'\n  \n  - RuntimeError\n  + BufferError"
+   }
+  },
+  "tests_failed_total": 5,
+  "tests_total": 23,
+  "result": "KILLED"
+ },
+ "m05_cat_no_extent_check": {
+  "test_file": "tensor_cuda/tests/test_bwdf1_copy_ops.py",
+  "tc_tree": "/tmp/bwdf1_src_m05_cat_no_extent_check",
+  "ts_tree": "/tmp/bwdf1_src_E",
+  "module_sha256": "387bb9c580a76f561fc0a2c4f27d66cb235273ab048a1ee2b9376106c47992eb",
+  "pytest_exit": 1,
+  "summary": "4 failed, 63 passed in 0.54s",
+  "expected_killing_tests": {
+   "test_cpu_c3_copy_op_refusal_no_cuda_call[cat-extent-voice-zero-first]": {
+    "outcome": "failed",
+    "message": "AssertionError: ('cat: operand 1 has extent 1 at dim 2', 'CUDA error at cat: no CUDA-capable device is detected')\nassert 'cat: operand 1 has extent 1 at dim 2' in 'CUDA error at cat: no CUDA-capable device is detected'"
+   },
+   "test_cpu_c3_copy_op_refusal_no_cuda_call[cat-extent-voice-longer-later]": {
+    "outcome": "failed",
+    "message": "AssertionError: ('cat: operand 1 has extent 6 at dim 2', 'CUDA error at cat: no CUDA-capable device is detected')\nassert 'cat: operand 1 has extent 6 at dim 2' in 'CUDA error at cat: no CUDA-capable device is detected'"
+   },
+   "test_cpu_c3_copy_op_refusal_no_cuda_call[cat-extent-shorter-later]": {
+    "outcome": "failed",
+    "message": "AssertionError: ('cat: operand 1 has extent 2 at dim 1', 'CUDA error at cat: no CUDA-capable device is detected')\nassert 'cat: operand 1 has extent 2 at dim 1' in 'CUDA error at cat: no CUDA-capable device is detected'"
+   },
+   "test_cpu_c3_copy_op_refusal_no_cuda_call[stack-shape]": {
+    "outcome": "failed",
+    "message": "AssertionError: ('stack: operand 1 has extent 4 at dim 1', 'CUDA error at cat: no CUDA-capable device is detected')\nassert 'stack: operand 1 has extent 4 at dim 1' in 'CUDA error at cat: no CUDA-capable device is detected'"
+   }
+  },
+  "tests_failed_total": 4,
+  "tests_total": 67,
+  "result": "KILLED"
+ },
+ "m06_cat_no_dtype_check": {
+  "test_file": "tensor_cuda/tests/test_bwdf1_copy_ops.py",
+  "tc_tree": "/tmp/bwdf1_src_m06_cat_no_dtype_check",
+  "ts_tree": "/tmp/bwdf1_src_E",
+  "module_sha256": "d53a9a48cc70c24ec15c716bc2de76e8f96c178b9ac68d2654303245f074d9a1",
+  "pytest_exit": 1,
+  "summary": "2 failed, 65 passed in 0.61s",
+  "expected_killing_tests": {
+   "test_cpu_c3_copy_op_refusal_no_cuda_call[cat-dtype]": {
+    "outcome": "failed",
+    "message": "AssertionError: ('cat: operand 1 has dtype float16', 'CUDA error at cat: no CUDA-capable device is detected')\nassert 'cat: operand 1 has dtype float16' in 'CUDA error at cat: no CUDA-capable device is detected'"
+   },
+   "test_cpu_c3_copy_op_refusal_no_cuda_call[stack-dtype]": {
+    "outcome": "failed",
+    "message": "AssertionError: ('stack: operand 1 has dtype bfloat16', 'CUDA error at cat: no CUDA-capable device is detected')\nassert 'stack: operand 1 has dtype bfloat16' in 'CUDA error at cat: no CUDA-capable device is detected'"
+   }
+  },
+  "tests_failed_total": 2,
+  "tests_total": 67,
+  "result": "KILLED"
+ }
+}

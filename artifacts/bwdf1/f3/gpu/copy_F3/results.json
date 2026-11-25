@@ -1,0 +1,82 @@
+{
+ "line": "copy_F3",
+ "arm": "F3",
+ "module_sha256": "36d023b3ce2b474907f1fd33c2e1b0906e2048314c7e59abdf4711ff351a04fb",
+ "rows": [
+  {
+   "id": "cat-voice-zero-first",
+   "op": "cat",
+   "result": "RAISED",
+   "error": "RuntimeError: cat: operand 1 has extent 1 at dim 2 but operand 0 has 0; extents must match outside dim 1 (operand 1 [1, 1, 1] float32 on cuda:0, operand 0 [1, 512, 0] float32 on cuda:0)"
+  },
+  {
+   "id": "cat-voice-longer-later",
+   "op": "cat",
+   "result": "RAISED",
+   "error": "RuntimeError: cat: operand 1 has extent 6 at dim 2 but operand 0 has 5; extents must match outside dim 1 (operand 1 [1, 2, 6] float32 on cuda:0, operand 0 [1, 3, 5] float32 on cuda:0)"
+  },
+  {
+   "id": "cat-dtype",
+   "op": "cat",
+   "result": "RAISED",
+   "error": "RuntimeError: cat: operand 1 has dtype float16 but operand 0 has float32 (the output's dtype; operand 1 has elements to copy) (operand 1 [2, 3] float16 on cuda:0, operand 0 [2, 3] float32 on cuda:0)"
+  },
+  {
+   "id": "stack-shape",
+   "op": "stack",
+   "result": "RAISED",
+   "error": "RuntimeError: stack: operand 1 has extent 4 at dim 1 but operand 0 has 3; every shape must be equal (operand 1 [2, 4] float32 on cuda:0, operand 0 [2, 3] float32 on cuda:0)"
+  },
+  {
+   "id": "slice-past-end",
+   "op": "slice",
+   "result": "RAISED",
+   "error": "RuntimeError: slice: start 3 and length 2 out of range for extent 4 at dim 0 of operand 0 of shape [4, 3]"
+  },
+  {
+   "id": "write_rows-start-negative",
+   "op": "write_rows",
+   "result": "RAISED",
+   "error": "RuntimeError: write_rows: start -1 is negative (operand 0 buf [1, 4, 2] float32 on cuda:0, operand 1 src [1, 1, 2] float32 on cuda:0)"
+  },
+  {
+   "id": "export_rows-rank0",
+   "op": "export_rows",
+   "result": "RETURNED",
+   "shape": [
+    1
+   ]
+  },
+  {
+   "id": "export_rows-past-end",
+   "op": "export_rows",
+   "result": "RAISED",
+   "error": "RuntimeError: export_rows: invalid span (operand 0 cache [1, 4, 2] float32 on cuda:0, dim 1, start 3, length 2)"
+  },
+  {
+   "id": "splice_rows-extent",
+   "op": "splice_rows",
+   "result": "RAISED",
+   "error": "RuntimeError: splice_rows: shape mismatch outside splice dim (operand 0 old_cache [1, 4, 2] float32 on cuda:0, operand 1 insert [1, 1, 3] float32 on cuda:0, dim 1, head 0, tail_start 1)"
+  },
+  {
+   "id": "evict_rows-drop-past-tail",
+   "op": "evict_rows",
+   "result": "RAISED",
+   "error": "RuntimeError: evict_rows: drop exceeds live tail (operand 0 old_cache [1, 4, 2] float32 on cuda:0, dim 1, head 3, drop 2)"
+  },
+  {
+   "id": "export_rope_rows-sin-short",
+   "op": "export_rope_rows",
+   "result": "RAISED",
+   "error": "RuntimeError: export_rope_rows: position past table end (operand 0 cache [1, 4, 2] float32 on cuda:0, operand 1 cos [8, 2] float32 on cuda:0, operand 2 sin [1, 2] float32 on cuda:0, dim 1, start 0, length 2, pos0 0)"
+  },
+  {
+   "id": "swap_row_pairs-pair1-extent",
+   "op": "swap_row_pairs_with_rope",
+   "result": "RAISED",
+   "error": "RuntimeError: splice_rows: shape mismatch outside splice dim (operand 0 old_cache [1, 4, 2] float32 on cuda:0, operand 1 insert [1, 1, 3] float32 on cuda:0, dim 1, head 0, tail_start 1) [pair 1 of 2]"
+  }
+ ],
+ "all_refused_on_host": false
+}

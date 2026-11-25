@@ -1,0 +1,611 @@
+{
+  "order": "orders/BWDF1_ZERO_EXTENT_AND_AUDIT_FIXES.md (Z1)",
+  "baseline": "fbd335ae7 (Build B); every file:line below is at that commit",
+  "written": "2026-11-24, before any product edit (the worktree's product files equal HEAD while this was written)",
+  "method": [
+    "L82 greps as given: grep -n \"broadcast_shape\\|bcast_strides\\|reduce_to\\|max(\" tensor_cuda/src/*.cu tensor_cuda/src/*.cpp ; grep -n \"broadcast\" tensor_cuda/tensor_cuda/*.py",
+    "by behaviour (L89): grep -n -i broadcast over tensor_cuda/src/*.{cu,cpp,cuh} and include/tc/*.h; every `Shape <name> =` / `Shape os` output-shape construction in kernels.cu, ops.cpp, matmul.cu, conv.cu, gemm_apa.cu, autograd.cpp read and classified; every caller of ew_binary / compare / where_nd / broadcast_to / reduce_to / accumulate_grad in tensor_cuda/src read; the Python package (tensor_cuda/tensor_cuda/*.py, quantization/*.py) grepped for broadcast / expand / max( / np.broadcast and every hit read",
+    "consumer roots: rg (read-only) in /mnt/ForgeRealm/Project-Voice/engine (kokoro_tc/model.py, grad.py, tail_vjp.py: the trained path) and /mnt/ForgeRealm/GRAPA-Native-LLM/grapa/*.py for .slice( / .expand( / masked_fill / tc.where / .maximum( / .minimum( / zero shapes; each hit read"
+  ],
+  "L99_reread": {
+    "broadcast_shape": "kernels.cu:1028-1039, as the order quotes: out[i] = ad > bd ? ad : bd after the compatibility test (ad != bd && ad != 1 && bd != 1 -> throw \"shapes not broadcastable\", no shapes named)",
+    "bcast_strides": "kernels.cu:1041-1050, as quoted: stride 0 where in[id] == 1 && out[d] != 1, else the operand's contiguous stride",
+    "ew_binary": "kernels.cu:1148-1166 (the order says 1147-1165; 1147 is the blank line before the definition: one-line offset, no content difference). Allocates out(broadcast_shape(a,b)), returns if out.numel()==0, else launches binary_kernel over out.numel() with a.data_ptr()/b.data_ptr(); no check that an operand with zero elements is not read",
+    "reduce_to": "kernels.cu:1364-1376, as quoted: sums axis d when the left-padded target extent is 1 and a.shape[d] > 1; then reshape(target)",
+    "reduce_to_callers": "ops.cpp:873, ops.cpp:1240, autograd.cpp:90, as the order quotes; no difference"
+  },
+  "sites": [
+    {
+      "id": "S1",
+      "role": "product",
+      "file_line": "tensor_cuda/src/kernels.cu:1028",
+      "name": "broadcast_shape (anonymous namespace)",
+      "rule_0_vs_1": "max(0, 1) = 1 (NumPy gives 0): WRONG",
+      "rule_0_vs_gt1": "refused (runtime_error \"shapes not broadcastable\", no shapes named), before any CUDA call when called first",
+      "callers": [
+        "S3 ew_binary kernels.cu:1150",
+        "S4 compare kernels.cu:1460",
+        "S5 where_nd kernels.cu:1479 (twice, nested)",
+        "S6 broadcast_to via S3"
+      ],
+      "fix": "Z2: equal -> that extent; one is 1 -> the other; else refuse naming both shapes"
+    },
+    {
+      "id": "S2",
+      "role": "product",
+      "file_line": "tensor_cuda/src/kernels.cu:1041",
+      "name": "bcast_strides (anonymous namespace)",
+      "rule_0_vs_1": "operand extent 1 against output 0: stride 0 (no element read); operand extent 0 against B's wrong output extent 1: the operand's contiguous stride, used to read an empty operand (null storage)",
+      "rule_0_vs_gt1": "not reached (S1 refuses first)",
+      "callers": [
+        "S3 kernels.cu:1158-1159",
+        "S4 kernels.cu:1467",
+        "S5 kernels.cu:1486"
+      ],
+      "fix": "none needed once S1 is right (strides for an output extent 0 are never used); unchanged"
+    },
+    {
+      "id": "S3",
+      "role": "product",
+      "file_line": "tensor_cuda/src/kernels.cu:1148",
+      "name": "ew_binary (binary dispatch: add/sub/mul/div/max/min ops 0-5)",
+      "rule_0_vs_1": "via S1 (wrong): out [4,1] for [4,0] (+) [4,1], then binary_kernel reads the empty operand's null pointer (the reading of the lead's memcheck: binary_kernel reads from 0x0)",
+      "rule_0_vs_gt1": "via S1: refused",
+      "fix": "S1 + Z2 dispatch guard (host, before the launch): an operand with zero elements and an output with elements is refused"
+    },
+    {
+      "id": "S4",
+      "role": "product",
+      "file_line": "tensor_cuda/src/kernels.cu:1458",
+      "name": "compare (gt/ge/lt/le/eq/ne, broadcasting)",
+      "rule_0_vs_1": "via S1 (wrong): compare_kernel over the wrong output reads the empty operand",
+      "rule_0_vs_gt1": "via S1: refused",
+      "fix": "S1 + the same dispatch guard"
+    },
+    {
+      "id": "S5",
+      "role": "product",
+      "file_line": "tensor_cuda/src/kernels.cu:1478",
+      "name": "where_nd (cond, x, y broadcast together)",
+      "rule_0_vs_1": "via S1 twice (wrong): where_kernel reads an empty operand",
+      "rule_0_vs_gt1": "via S1: refused; the message would not name the three operand shapes (the inner call's intermediate shape)",
+      "fix": "a three-shape helper over S1's rule that names all three operand shapes + the dispatch guard"
+    },
+    {
+      "id": "S6",
+      "role": "product",
+      "file_line": "tensor_cuda/src/kernels.cu:1491",
+      "name": "broadcast_to (= ew_binary(NDArray::zeros(shape), a, add))",
+      "rule_0_vs_1": "via S1 (wrong): e.g. broadcast_to(mxk [4,1], [4,0]) gives [4,1] and reads zeros([4,0])'s null storage",
+      "rule_0_vs_gt1": "refused by S1, but only after NDArray::zeros(shape) allocated and memset the left operand (a CUDA call before the refusal on a non-empty target)",
+      "fix": "check the shapes with S1's rule before the zeros allocation; output shape = S1(shape, a.shape) as before (no new check that the result equals `shape`: that would change results for shapes without a zero extent, e.g. expand([4,3] -> [3]) gives [4,3] today; residual, listed)"
+    },
+    {
+      "id": "S7",
+      "role": "product",
+      "file_line": "tensor_cuda/src/kernels.cu:1364",
+      "name": "reduce_to (gradient of a broadcast operand)",
+      "rule_0_vs_1": "a source extent 0 against a target extent 1 is not summed (test is > 1); reshape to the target then raises \"reshape: element count mismatch\" (audit F03)",
+      "rule_0_vs_gt1": "not applicable (a gradient's extent is the output's, which equals the operand's or is broadcast from 1)",
+      "fix": "Z3: sum every axis with target 1 and source != 1 (0 included); a sum over an empty axis gives zeros (reduce_impl's sum identity 0.f, no element read)"
+    },
+    {
+      "id": "S8",
+      "role": "product",
+      "file_line": "tensor_cuda/src/matmul.cu:88 (matmul_operand_plan; batch rule 127-160)",
+      "name": "matmul batch shape (forward tc::matmul and ops::matmul_backward share it, ENG4)",
+      "rule_0_vs_1": "not the max rule. Output batch = A's leading extents. Unequal ranks: B's leading extents must all be 1, so A 0 against B 1 gives 0 (NumPy's answer). Equal ranks: batch shapes must be equal, so A 1 against B 0 is refused (NumPy would give 0) -- the same refusal as A 1 against B 3: matmul's documented narrower contract (\"no new broadcasting\", ENG4)",
+      "rule_0_vs_gt1": "refused (BatchShape), before any CUDA call, message names both shapes (ENG4)",
+      "fix": "none: it never produces an extent NumPy would not; extending it to NumPy's full batch broadcasting is new broadcasting (Does not cover). Its zero-batch dB goes through ENG4-F2's zero fill, and the remaining reduce_to call (ops.cpp:873) is S7"
+    },
+    {
+      "id": "S9",
+      "role": "product",
+      "file_line": "tensor_cuda/tensor_cuda/functional.py:203 (einsum; also tensor_cuda/__init__.py:1387 forwards to it)",
+      "name": "einsum's aligned operand shapes",
+      "rule_0_vs_1": "no rule of its own: each operand is reshaped to the union of indices with 1 for an absent index, then multiplied with `*` (S3 via ops::mul) and summed; a shared index with extents 0 and 1 reaches S1",
+      "rule_0_vs_gt1": "via S1: refused",
+      "fix": "none in Python; fixed by S1"
+    },
+    {
+      "id": "S10",
+      "role": "product",
+      "file_line": "tensor_cuda/src/kernels.cu:5395 (axpy_, at fbd335ae7)",
+      "name": "axpy_ (param += alpha * other through ew_binary, then a raw copy of param's byte count)",
+      "rule_0_vs_1": "via S1 (wrong): param [4, 1] with other [4, 0] reads the empty operand; with S1 fixed the update has shape [4, 0] and the raw copy of param's 16 bytes would read past an empty buffer",
+      "rule_0_vs_gt1": "via S1: refused, but after ew_scalar's launch on `other`",
+      "fix": "S1's rule checked first (before ew_scalar) and an update with fewer elements than param refused",
+      "note": "listed under public_ops (tc._C.axpy_) when this census was first written; promoted to a site row after the edit (LEDGER)"
+    },
+    {
+      "id": "S11",
+      "role": "product",
+      "file_line": "tensor_cuda/src/ops.cpp:1112 (ops::masked_fill, at fbd335ae7)",
+      "name": "masked_fill's broadcast of mask against a (via S5) after NDArray::full(a.shape)",
+      "rule_0_vs_1": "via S5",
+      "rule_0_vs_gt1": "refused by S5, but after the fill's allocation (a CUDA call on a device operand)",
+      "fix": "tc::broadcast_shapes(mask, a) before the fill",
+      "note": "listed under public_ops when first written; promoted to a site row after the edit (LEDGER)"
+    }
+  ],
+  "examined_not_broadcast_sites": [
+    {
+      "file_line": "tensor_cuda/src/kernels.cu:1517 cat_nd",
+      "why": "concatenation: output takes arrs[0]'s non-cat extents; no pairing rule (it does not check the other operands' non-cat extents either: pre-existing, not broadcasting, outside this order; noted for the lead)"
+    },
+    {
+      "file_line": "tensor_cuda/src/kernels.cu:4458 int4_linear_fused, :4684 (w8a16), :4904 intn_linear_fused, :5148 mxfp4 linear",
+      "why": "a fixed [N,K] weight applied over x's leading extents: output = x.shape[:-1] + [N]; no extent pairing"
+    },
+    {
+      "file_line": "tensor_cuda/src/kernels.cu:1306 reduce_impl / ops.cpp:1019 keepdim_shape",
+      "why": "reductions: one operand"
+    },
+    {
+      "file_line": "tensor_cuda/src/kernels.cu:5366, 5437, 5527, 5603, 5688; 8160-8332",
+      "why": "gather/slice/argmax/topk/row-cache ops: one operand or fixed-shape contracts"
+    },
+    {
+      "file_line": "tensor_cuda/src/conv.cu:159, 188",
+      "why": "im2col/col2im/pool geometry"
+    },
+    {
+      "file_line": "tensor_cuda/src/ops.cpp:466 rms_norm, kernels.cu rope/gated_delta/apa ops",
+      "why": "fixed-shape contracts checked in their own entries, no extent pairing"
+    },
+    {
+      "file_line": "tensor_cuda/tensor_cuda/__init__.py:769 _terrain_max_steps max(...)",
+      "why": "a step count, not a shape"
+    },
+    {
+      "file_line": "tensor_cuda/tensor_cuda/optim.py:245-332 max(...)",
+      "why": "schedules, scalars"
+    }
+  ],
+  "public_ops": [
+    {
+      "op": "Tensor.__add__(Tensor) / tc._C.add",
+      "path": "bindings.cpp:2055, 2332 -> ops::add ops.cpp:58 -> ew_binary (S3); backward accumulate_grad -> reduce_to (S7)",
+      "sites": [
+        "S1",
+        "S3",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.__sub__(Tensor)",
+      "path": "bindings.cpp:2058 -> ops::sub ops.cpp:65 -> S3; backward S7",
+      "sites": [
+        "S1",
+        "S3",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.__mul__(Tensor) / tc._C.mul",
+      "path": "bindings.cpp:2060, 2333 -> ops::mul ops.cpp:72 -> S3; backward nmul (S3) + S7",
+      "sites": [
+        "S1",
+        "S3",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.__truediv__(Tensor)",
+      "path": "bindings.cpp:2063 -> ops::div ops.cpp:79 -> S3; backward ndiv/nmul (S3) + S7",
+      "sites": [
+        "S1",
+        "S3",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.maximum",
+      "path": "bindings.cpp:2006 -> ops::maximum ops.cpp:272 -> S3 (op 4); backward compare (S4) + nmul (S3) + S7",
+      "sites": [
+        "S1",
+        "S3",
+        "S4",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.minimum",
+      "path": "bindings.cpp:2007 -> ops::minimum ops.cpp:280 -> S3 (op 5); backward S4 + S3 + S7",
+      "sites": [
+        "S1",
+        "S3",
+        "S4",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.gt / ge / lt / le / eq",
+      "path": "bindings.cpp:2044-2048 -> ops::compare ops.cpp:1096 -> S4 (no gradient)",
+      "sites": [
+        "S1",
+        "S4"
+      ]
+    },
+    {
+      "op": "tc.where / tc._C.where",
+      "path": "__init__.py:1383 -> bindings.cpp:2334 -> ops::where ops.cpp:1103 -> S5; backward where_nd (S5) + S7",
+      "sites": [
+        "S1",
+        "S5",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.masked_fill",
+      "path": "bindings.cpp:2043 -> ops::masked_fill ops.cpp:1112 -> NDArray::full(a.shape) then S5; backward S5 + S7",
+      "sites": [
+        "S1",
+        "S5",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.expand",
+      "path": "bindings.cpp:2041 -> ops::expand ops.cpp:1236 -> broadcast_to (S6 -> S3); backward reduce_to (S7, ops.cpp:1240)",
+      "sites": [
+        "S1",
+        "S3",
+        "S6",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.sum / mean (backward)",
+      "path": "ops::sum ops.cpp:1026 closure: nadd(NDArray::zeros(in_shape), g.reshape(kshape)) -> S3; mean = mul_scalar(sum)",
+      "sites": [
+        "S1",
+        "S3",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.max / min (backward)",
+      "path": "ops::max ops.cpp:1122 / ops::min ops.cpp:1135 closures: broadcast_to (S6), compare (S4), nmul/ndiv (S3)",
+      "sites": [
+        "S1",
+        "S3",
+        "S4",
+        "S6",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.prod (backward)",
+      "path": "ops::prod ops.cpp:1156 closure: broadcast_to (S6), nmul/ndiv (S3)",
+      "sites": [
+        "S1",
+        "S3",
+        "S6",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.softmax / log_softmax",
+      "path": "ops.cpp:1060 / 1277: sub(a, reduce_max keepdim) and div(e, sum keepdim) -> S3; backward S3 + S7",
+      "sites": [
+        "S1",
+        "S3",
+        "S7"
+      ]
+    },
+    {
+      "op": "Tensor.var / std, tc.mse_loss, tc.cross_entropy",
+      "path": "ops.cpp:1148, 1153, 1067, 1283: sub/mul/mean compositions -> S3; backward S3 + S7",
+      "sites": [
+        "S1",
+        "S3",
+        "S7"
+      ]
+    },
+    {
+      "op": "tc.matmul / Tensor.__matmul__ (backward, shared B)",
+      "path": "ops::matmul ops.cpp:831 closure -> reduce_to ops.cpp:873 (S7) when weight.ndim != b.ndim; batch shape S8",
+      "sites": [
+        "S7",
+        "S8"
+      ]
+    },
+    {
+      "op": "tc.einsum",
+      "path": "functional.py:203 -> Tensor.__mul__ (S3), sum",
+      "sites": [
+        "S1",
+        "S3",
+        "S7",
+        "S9"
+      ]
+    },
+    {
+      "op": "tc._C.axpy_ (optimizer step)",
+      "path": "bindings.cpp:2670 -> tc::axpy_ kernels.cu:5395 -> ew_binary (S3) on equal shapes (param, other)",
+      "sites": [
+        "S1",
+        "S3"
+      ]
+    },
+    {
+      "op": "every backward (Tensor.backward, attach_vjp slots, checkpoint replay)",
+      "path": "Variable::accumulate_grad autograd.cpp:86 -> reduce_to (S7, autograd.cpp:90) and grad = ew_binary(grad, gr) (S3, autograd.cpp:92); reached from autograd.cpp:181 (attach_vjp), 238-239 (seed), bindings.cpp:227 (checkpoint)",
+      "sites": [
+        "S3",
+        "S7"
+      ]
+    }
+  ],
+  "python_callers_of_sites": [
+    "tensor_cuda/tensor_cuda/nn.py:197 (LeakyReLU x.maximum), :207 (ELU tc.where), :791, :807 (losses tc.where)",
+    "tensor_cuda/tensor_cuda/quant.py:124 (.expand), :254, :302-303 (masked_fill), :327 (tc.where)",
+    "tensor_cuda/tensor_cuda/apa_packed.py:388 (.expand)",
+    "tensor_cuda/tensor_cuda/functional.py:65-130 (masked_fill / tc._C.where in _guarded_softmax), :203 einsum (S9)"
+  ],
+  "reduce_to_callers": [
+    {
+      "file_line": "tensor_cuda/src/ops.cpp:873",
+      "context": "matmul backward, shared B (weight.ndim != b.ndim): reduce_to(grad_b, weight.shape)"
+    },
+    {
+      "file_line": "tensor_cuda/src/ops.cpp:1240",
+      "context": "expand backward: reduce_to(g, in_shape)"
+    },
+    {
+      "file_line": "tensor_cuda/src/autograd.cpp:90",
+      "context": "Variable::accumulate_grad: every gradient into every variable"
+    }
+  ],
+  "consumers": [
+    {
+      "root": "/mnt/ForgeRealm/Project-Voice/engine",
+      "role": "consumer",
+      "result": "not found",
+      "evidence": "kokoro_tc/model.py:802-826 adds token rows and expands style rows over T = ids.size; ids = [0, *tokens, 0] (model.py:792), so T >= 2, never 0. tail_vjp.py:114 x.maximum(xa), :116-117/136 slices with constant extents (N_BINS, TRIM, L = 5*(F-1)), operands shape-checked at tail_vjp.py:105-106. model.py:720 x.maximum(x*alpha) (same shapes), :749-750/831-832 constant-extent slices. No site found that can pass a zero-extent tensor into a broadcasting op."
+    },
+    {
+      "root": "/mnt/ForgeRealm/GRAPA-Native-LLM",
+      "role": "consumer",
+      "result": "not found",
+      "evidence": "grapa/attention.py:36 expand over B, KVH, rep, S, D; :95 masked_fill; :112 tc.where; attention_mla.py:94-113 slices by config head dims (qk_nope_dim, qk_rope_dim, kv_lora) and expand: zero only if a config sets a zero head dimension (not seen in the code read); cc5_screen.py:247 slices len(positions) after indexing positions[0] (so >= 1) and does no broadcast; evaluate.py:390, copy_overfit_probe.py:302-342 slices of length 1. No site found that can pass a zero-extent tensor into a broadcasting op (grep-level reading, not an execution census)."
+    }
+  ],
+  "role_counts": {
+    "product": {
+      "broadcast_shape_sites": 11,
+      "of_which_fixed_by_Z2_Z3": [
+        "S1",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S7",
+        "S9 (einsum: per-index check before its permutes)",
+        "S10",
+        "S11"
+      ],
+      "unchanged_with_reason": [
+        "S2",
+        "S8"
+      ],
+      "public_ops_listed": 19,
+      "reduce_to_callers": 3
+    },
+    "test": {
+      "existing_tests_pinning_zero_extent_broadcast": 0,
+      "search": "grep of tensor_cuda/tests, tests/, tc_signal/tests and top-level test_*.py for \"not broadcastable\", \"element count mismatch\", reduce_to, broadcast; each hit read: test_apa_value_dim.py:74 and test_eng1.py:99-113 pin reshape's own message on direct reshapes (not a broadcast); test_eng4_matmul.py's zero-size cases pin matmul (S8, unchanged); none asserts a zero-extent broadcast shape or refusal"
+    },
+    "consumer": {
+      "roots": 2,
+      "sites_found": 0
+    },
+    "harness": {
+      "scripts": "scripts/bwdf1_*.py (this round)"
+    }
+  },
+  "amendment_1_c1_copy_ops": {
+    "written": "2026-11-24 ~02:15Z, Amendment 1 C1 (after Part Z's census; the C2 edits were made right after this census was read from the source, see LEDGER)",
+    "method": "every function in tensor_cuda/src/kernels.cu that copies one or several operands into a new output or a region of another (grep of ^NDArray / ^void / ^std::tuple names for cat|slice|pad|row|splice|evict|scatter|stack|copy|arena|write|export, each read), plus ops::stack / ops::cat (ops.cpp) and the Python wrappers (tensor_cuda/__init__.py:1038-1096, 1398-1411)",
+    "ops": [
+      {
+        "op": "cat_nd (tc.cat, Tensor cat backward uses slice_nd)",
+        "file_line_B": "kernels.cu:1513 (E 1653); ops.cpp:1255; bindings m.def(\"cat\"); __init__.py:1398",
+        "preconditions": [
+          "list non-empty",
+          "rank >= 1",
+          "dim in [-nd, nd)",
+          "every operand's rank == operand 0's",
+          "extents equal outside dim",
+          "same dtype",
+          "same device",
+          "dtype in the float dispatch set when a copy runs"
+        ],
+        "checked_in_B": [
+          "list non-empty"
+        ],
+        "checked_in_E": "all (check_copy_operands, before the allocation)",
+        "zero_size_rule": "NumPy concatenate: an empty operand needs the same rank and the same non-cat extents ([1, 512, 0] with [1, 1, 1] on dim 1 is refused, as NumPy refuses it)"
+      },
+      {
+        "op": "stack (ops::stack = unsqueeze each + cat)",
+        "file_line_B": "ops.cpp:1271",
+        "preconditions": [
+          "list non-empty",
+          "dim in [-(nd+1), nd]",
+          "every shape equal",
+          "same dtype",
+          "same device"
+        ],
+        "checked_in_B": [
+          "none of its own (an empty list reached cat's check; a dim out of range reached unsqueeze's vector insert past the end: host heap corruption, measured: BOUNDARY.json stack-dim-low exit -6)"
+        ],
+        "checked_in_E": "all (check_copy_operands all_extents, before any unsqueeze)",
+        "zero_size_rule": "NumPy stack (every shape equal; rank-0 operands give a rank-1 result, unchanged)"
+      },
+      {
+        "op": "slice_nd (Tensor.slice, __getitem__, cat backward)",
+        "file_line_B": "kernels.cu:5434 (E 5585); ops.cpp:287",
+        "preconditions": [
+          "dim in [-nd, nd)",
+          "start >= 0",
+          "len >= 0",
+          "start + len <= extent"
+        ],
+        "checked_in_B": [
+          "none"
+        ],
+        "checked_in_E": "all, before the allocation",
+        "zero_size_rule": "no NumPy analogue for a refused span (NumPy clamps); a zero-length span inside the extent is accepted, as before"
+      },
+      {
+        "op": "pad_into (slice's backward only; not public)",
+        "file_line_B": "kernels.cu:5714 (E 5876)",
+        "preconditions": [
+          "rank equal to the target's",
+          "extents equal outside dim",
+          "dim in range",
+          "start >= 0 and start + extent <= target extent"
+        ],
+        "checked_in_B": [
+          "none (the slice forward's arguments made them hold for engine callers)"
+        ],
+        "checked_in_E": "all, before the zeros allocation; not reachable with bad inputs through the public API (no G1 row; stated)"
+      },
+      {
+        "op": "write_rows (tc.write_rows, in place)",
+        "file_line_B": "kernels.cu:8053 (E 8231)",
+        "preconditions": [
+          "same dtype",
+          "rank >= 2 each",
+          "same device; CUDA when anything is copied",
+          "last extents equal",
+          "leading extents' products equal",
+          "src rows <= capacity",
+          "start >= 0 (negative start gives a negative ring row)",
+          "CAP * D > 0 for B's quotient (B divided by zero otherwise)"
+        ],
+        "checked_in_B": [
+          "dtype",
+          "rank",
+          "last extent",
+          "leading product (by division)",
+          "capacity"
+        ],
+        "checked_in_E": "all; leading extents compared as products (no division)",
+        "zero_size_rule": "no NumPy analogue: an empty src is a no-op once the shapes check"
+      },
+      {
+        "op": "export_rows",
+        "file_line_B": "kernels.cu:8150 (E 8360)",
+        "preconditions": [
+          "CUDA",
+          "rank >= 1",
+          "dim in range",
+          "0 <= start, 0 <= len, start + len <= extent"
+        ],
+        "checked_in_B": [
+          "all"
+        ],
+        "checked_in_E": "same terms; messages now name the shapes; end test written without overflow"
+      },
+      {
+        "op": "splice_rows",
+        "file_line_B": "kernels.cu:8176 (E 8406)",
+        "preconditions": [
+          "same dtype",
+          "same device",
+          "CUDA",
+          "same rank, rank >= 1",
+          "extents equal outside dim",
+          "dim in range",
+          "0 <= head <= tail <= extent"
+        ],
+        "checked_in_B": [
+          "all"
+        ],
+        "checked_in_E": "same terms; messages name the operand shapes"
+      },
+      {
+        "op": "evict_rows (splice with an empty insert)",
+        "file_line_B": "kernels.cu:8214 (E 8445)",
+        "preconditions": [
+          "CUDA",
+          "rank >= 1",
+          "dim in range",
+          "0 <= head, 0 <= drop, head + drop <= extent"
+        ],
+        "checked_in_B": [
+          "all"
+        ],
+        "checked_in_E": "same terms; messages name the shape"
+      },
+      {
+        "op": "export_rope_rows",
+        "file_line_B": "kernels.cu:8310 (E 8566)",
+        "preconditions": [
+          "CUDA",
+          "rank >= 2",
+          "seq dim -2",
+          "even D",
+          "span in range",
+          "table dtypes",
+          "cos and sin rank 2 with D columns",
+          "tables on the cache's device",
+          "pos0 >= 0 and pos0 + len <= rows of cos AND of sin"
+        ],
+        "checked_in_B": [
+          "CUDA",
+          "rank",
+          "seq dim",
+          "even D",
+          "span",
+          "table dtypes",
+          "cos rank and D columns (sin's rank unchecked: sin.shape[1] read on any rank)",
+          "pos0 + len <= cos rows (sin rows unchecked)"
+        ],
+        "checked_in_E": "all"
+      },
+      {
+        "op": "export_row_pair / export_row_pairs / swap_row_pairs_with_rope / evict_row_pairs / arena_row_pair_transaction",
+        "file_line_B": "kernels.cu:8349, 8361, 8387, 8414, 8436 (E 8590, 8602, 8633, 8676, 8703)",
+        "preconditions": [
+          "each pair's export_rows / export_rope_rows / splice_rows / evict_rows terms",
+          "rope_apply's table terms for the rope inserts (swap / arena)",
+          "list sizes (already checked)"
+        ],
+        "checked_in_B": [
+          "per pair, inside the loop: a bad pair i refused after pairs < i allocated and launched"
+        ],
+        "checked_in_E": "every pair's copy terms (and rope_apply's own terms, same texts) checked before any pair's work"
+      },
+      {
+        "op": "scatter_add_nd / gather_nd / embedding (index-driven)",
+        "file_line_B": "kernels.cu:5643 and neighbours",
+        "preconditions": [
+          "index values in range"
+        ],
+        "checked_in_B": [
+          "shape terms only"
+        ],
+        "checked_in_E": "unchanged: index-driven, not a shape-driven copy; outside C1's class as read; residual for the lead"
+      },
+      {
+        "op": "rope_apply (not a copy op)",
+        "file_line_B": "kernels.cu rope_apply",
+        "preconditions": [
+          "sin rank and rows, pos0 >= 0, table devices"
+        ],
+        "checked_in_B": [
+          "same gaps as export_rope_rows had"
+        ],
+        "checked_in_E": "unchanged (outside C1); residual for the lead"
+      }
+    ],
+    "consumer": {
+      "role": "consumer (report-only, L90)",
+      "site": "/mnt/ForgeRealm/Project-Voice/engine/kokoro_tc/grad.py:301 tc.cat([asr, f0c, nc], 1) (and :305 in the decode loop): a 0-frame asr gives Voice's first case ([1, 512, 0] with later non-empty operands), which Build E refuses on the host"
+    }
+  }
+}

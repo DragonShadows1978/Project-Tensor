@@ -1,0 +1,175 @@
+{
+ "order": "BWD-F3 operand census",
+ "L82_grep": [
+  "tensor_cuda/src/kernels.cu:1115:// that is indexed by axis (DimSpec, ReduceSpec and reduce_kernel's coord, PermSpec, Dim3Spec, DimCopySpec, GatherSpec,",
+  "tensor_cuda/src/kernels.cu:1315:// BWD-F3 E3 (review BWDF1R2-F06): the reduction-axis rule, shared by every reduction entry (reduce_impl, which writes",
+  "tensor_cuda/src/kernels.cu:1316:// ReduceSpec and serves reduce_sum / max / min / prod and every ops.cpp wrapper; reduce_arg; ops::mean, which reads",
+  "tensor_cuda/src/kernels.cu:1318:// ReduceSpec::reduced[] and keep_shape[] and read a.shape[d]: sum([8]) on a rank-1 operand wrote reduced[8] (past the",
+  "tensor_cuda/src/kernels.cu:1352:struct ReduceSpec {",
+  "tensor_cuda/src/kernels.cu:1406:__global__ void reduce_kernel(const T* in, T* out, ReduceSpec s, int64_t out_n) {",
+  "tensor_cuda/src/kernels.cu:1437:NDArray reduce_impl(const NDArray& a, std::vector<int> axes, bool keepdim, int mode) {",
+  "tensor_cuda/src/kernels.cu:1439:  check_meta_rank(\"reduce\", nd, \"operand \" + bcast_shape_text(a.shape));  // BWD-F2 R2: ReduceSpec / coord slots",
+  "tensor_cuda/src/kernels.cu:1444:  ReduceSpec s{};",
+  "tensor_cuda/src/kernels.cu:1507:  return reduce_impl(a, axes, keepdim, 0);",
+  "tensor_cuda/src/kernels.cu:1510:  return reduce_impl(a, axes, keepdim, 1);",
+  "tensor_cuda/src/kernels.cu:1513:  return reduce_impl(a, axes, keepdim, 2);",
+  "tensor_cuda/src/kernels.cu:1516:  return reduce_impl(a, axes, keepdim, 3);",
+  "tensor_cuda/src/kernels.cu:1528:    // reshape below raised \"element count mismatch\". A sum over an empty axis gives zeros (reduce_impl starts a sum",
+  "tensor_cuda/src/kernels.cu:8432:static int64_t product_dims(const Shape& shape, int first, int last);  // defined below (row-cache helpers)",
+  "tensor_cuda/src/kernels.cu:8457:  int64_t lead_b = product_dims(buf.shape, 0, buf.ndim() - 2);",
+  "tensor_cuda/src/kernels.cu:8458:  int64_t lead_s = product_dims(src.shape, 0, src.ndim() - 2);",
+  "tensor_cuda/src/kernels.cu:8546:static int64_t product_dims(const Shape& shape, int first, int last) {",
+  "tensor_cuda/src/kernels.cu:8593:// cannot be built before any pair's allocation or launch. Before, splice_rows_check proved the new extent fits int64",
+  "tensor_cuda/src/kernels.cu:8596:// constructor's, after \"<op>: the output \" and before the operands. Called by export_rows_check, splice_rows_check,",
+  "tensor_cuda/src/kernels.cu:8597:// evict_rows_check, export_rope_rows_check and rope_apply_check, i.e. by every pair preflight (export_row_pair,",
+  "tensor_cuda/src/kernels.cu:8641:  int64_t row_bytes = nbytes > 0 ? product_dims(cache.shape, d + 1, cache.ndim()) * (int64_t)dtype_size(cache.dtype)",
+  "tensor_cuda/src/kernels.cu:8653:int splice_rows_check(const NDArray& old_cache, const Shape& insert_shape, DType insert_dtype,",
+  "tensor_cuda/src/kernels.cu:8688:  const int d = splice_rows_check(old_cache, insert.shape, insert.dtype, insert.device, dim, head_tokens,",
+  "tensor_cuda/src/kernels.cu:8693:  out_shape[d] = head_tokens + insert_seq + (old_seq - tail_start);  // checked in splice_rows_check",
+  "tensor_cuda/src/kernels.cu:8698:      ? product_dims(old_cache.shape, d + 1, old_cache.ndim()) * (int64_t)dtype_size(old_cache.dtype) : 0;",
+  "tensor_cuda/src/kernels.cu:8804:static void rope_tables_check(const char* op, const char* xname, DType xdtype, const Device& xdevice, int64_t D,",
+  "tensor_cuda/src/kernels.cu:8828:static void rope_apply_check(const NDArray& x, const NDArray& cs, const NDArray& sn, int64_t pos0) {",
+  "tensor_cuda/src/kernels.cu:8832:  rope_tables_check(\"rope_apply\", \"x\", x.dtype, x.device, D, L, pos0, cs, sn, x.numel() > 0,",
+  "tensor_cuda/src/kernels.cu:8839:  rope_apply_check(x, cs, sn, pos0);  // BWD-F2 R3: every term before the allocation",
+  "tensor_cuda/src/kernels.cu:8906:  rope_tables_check(\"export_rope_rows\", \"cache\", cache.dtype, cache.device, D, len, pos0, cs, sn,",
+  "tensor_cuda/src/kernels.cu:9006:      splice_rows_check(raw_caches[i], raw_inserts[i].shape, raw_inserts[i].dtype, raw_inserts[i].device, raw_dim,",
+  "tensor_cuda/src/kernels.cu:9009:      rope_apply_check(x, cs, sn, pos0);",
+  "tensor_cuda/src/kernels.cu:9010:      splice_rows_check(rope_caches[i], x.shape, x.dtype, x.device, rope_dim, head_tokens, tail_start);"
+ ],
+ "rope_paths_by_table_read": {
+  "table_reads (the only kernels that read cos/sin rows)": [
+   "tensor_cuda/src/kernels.cu:8764: st<T>(y, i, xv * ld<T>(cs, t) + xr * ld<T>(sn, t) * sin_sign);",
+   "tensor_cuda/src/kernels.cu:8877: st<T>(out, i, xv * ld<T>(cs, t) + xr * ld<T>(sn, t) * sin_sign);"
+  ],
+  "launchers and their validator": {
+   "rope_apply": {
+    "launch": "tensor_cuda/src/kernels.cu:8846",
+    "check": "tensor_cuda/src/kernels.cu:8839",
+    "reads": "x.numel() > 0",
+    "read_span": "[pos0, pos0 + L), L = x.shape[-2]"
+   },
+   "export_rope_rows": {
+    "launch": "tensor_cuda/src/kernels.cu:8925",
+    "check": "tensor_cuda/src/kernels.cu:8906",
+    "reads": "output [.., len, D] has elements",
+    "read_span": "[pos0, pos0 + len)"
+   },
+   "export_row_pair": {
+    "check": "tensor_cuda/src/kernels.cu:8945",
+    "note": "both sides checked before the raw export"
+   },
+   "export_row_pairs": {
+    "check": "tensor_cuda/src/kernels.cu:8970",
+    "note": "every pair checked before any pair's work"
+   },
+   "swap_row_pairs_with_rope": {
+    "check": "tensor_cuda/src/kernels.cu:9009",
+    "note": "rope_apply's own check on each rope insert, every pair first"
+   },
+   "arena_row_pair_transaction": {
+    "check": "delegates to swap_row_pairs_with_rope (or evict_row_pairs) tensor_cuda/src/kernels.cu:9112"
+   }
+  },
+  "validator": {
+   "rope_tables_check": "tensor_cuda/src/kernels.cu:8804",
+   "dtype (D1, every call)": "tensor_cuda/src/kernels.cu:8808",
+   "layout (E2)": "tensor_cuda/src/kernels.cu:8810",
+   "span (E1, reads only)": "tensor_cuda/src/kernels.cu:8812",
+   "device / launch dtype (reads only, BWD-F2 R1)": "tensor_cuda/src/kernels.cu:8815"
+  },
+  "consumers (report-only)": [
+   "tensor_cuda/tensor_cuda/__init__.py re-exports rope_apply and the row ops",
+   "tensor_cuda/tensor_cuda/functional.py apply_rotary composes ops (no fused table read)"
+  ]
+ },
+ "reductions": {
+  "spec_writers (ReduceSpec)": {
+   "reduce_impl": "tensor_cuda/src/kernels.cu:1437",
+   "axis rule": "tensor_cuda/src/kernels.cu:1442",
+   "first spec write after it": "tensor_cuda/src/kernels.cu:1444"
+  },
+  "entries": {
+   "reduce_sum / reduce_max / reduce_min / reduce_prod (kernels.cu)": "reduce_impl",
+   "ops::sum, ops::max, ops::min, ops::prod (ops.cpp)": "reduce_impl first; keepdim_shape after it reads only validated axes",
+   "ops::softmax, ops::log_softmax (ops.cpp)": "reduce_max({axis}) first",
+   "ops::mean (ops.cpp)": "tensor_cuda/src/ops.cpp:1062",
+   "ops::var, ops::std": "ops::mean first",
+   "reduce_arg (argmax / argmin)": "tensor_cuda/src/kernels.cu:5872",
+   "reduce_to (autograd)": "builds distinct in-range axes itself; reduce_impl re-checks them",
+   "cross_entropy, mse_loss": "fixed axes ({-1}, {}) through sum / mean"
+  },
+  "helper": "tensor_cuda/src/kernels.cu:1326",
+  "not reductions (listed, unchanged)": [
+   "cumsum_nd (a scan: axis_split reads shape[axis] unchecked; residual)",
+   "flip_nd (FlipSpec axes: the confirm's successor)",
+   "gather_nd / scatter_add_nd (the confirm's successor)"
+  ],
+  "consumers (report-only)": "tensor_cuda/tensor_cuda/nn.py, quant.py, optim.py, functional.py call sum / mean / var with fixed axes; tc_signal does not include the core headers"
+ },
+ "pair_preflight_byte_bounds": {
+  "helper": "tensor_cuda/src/kernels.cu:8602",
+  "shared bound": "tensor_cuda/src/kernels.cu:539",
+  "sites": {
+   "export_rows_check": "tensor_cuda/src/kernels.cu:8627",
+   "splice_rows_check": "tensor_cuda/src/kernels.cu:8682",
+   "evict_rows_check": "tensor_cuda/src/kernels.cu:8725",
+   "export_rope_rows_check": "tensor_cuda/src/kernels.cu:8908",
+   "rope_apply_check": "tensor_cuda/src/kernels.cu:8834"
+  },
+  "pair ops and the preflights they run": {
+   "export_row_pair": "export_rows_check + export_rope_rows_check",
+   "export_row_pairs": "the same, for every pair first",
+   "swap_row_pairs_with_rope": "splice_rows_check (raw) + rope_apply_check + splice_rows_check (rope), every pair first",
+   "evict_row_pairs": "evict_rows_check x 2, every pair first",
+   "arena_row_pair_transaction": "evict_row_pairs or swap_row_pairs_with_rope"
+  },
+  "can_fire": "only splice (its extent grows); the others' outputs are no larger than an operand"
+ },
+ "D1_rows": {
+  "rank above TC_MAX_DIMS": {
+   "sites": [
+    "tensor_cuda/src/kernels.cu:1122: void check_meta_rank(const char* op, int rank, const std::string& operands) {",
+    "tensor_cuda/src/kernels.cu:1244: check_meta_rank(\"ew_binary\", std::max(a.ndim(), b.ndim()),  // BWD-F2 R2: DimSpec's slots",
+    "tensor_cuda/src/kernels.cu:1439: check_meta_rank(\"reduce\", nd, \"operand \" + bcast_shape_text(a.shape));  // BWD-F2 R2: ReduceSpec / coord slots",
+    "tensor_cuda/src/kernels.cu:1553: check_meta_rank(\"permute\", nd, \"operand \" + bcast_shape_text(a.shape));  // BWD-F2 R2: PermSpec's slots",
+    "tensor_cuda/src/kernels.cu:1631: check_meta_rank(\"compare\", std::max(a.ndim(), b.ndim()),  // BWD-F2 R2: DimSpec's slots",
+    "tensor_cuda/src/kernels.cu:1656: check_meta_rank(\"where\", std::max({c.ndim(), x.ndim(), y.ndim()}), ops_text);  // BWD-F2 R2: Dim3Spec's slots",
+    "tensor_cuda/src/kernels.cu:1699: check_meta_rank(\"broadcast_to\", std::max((int)shape.size(), a.ndim()),  // BWD-F2 R2: before the zeros allocation",
+    "tensor_cuda/src/kernels.cu:1756: check_meta_rank(op, nd + (all_extents ? 1 : 0), \"operand 0 \" + copy_operand_text(a0));",
+    "tensor_cuda/src/kernels.cu:5697: check_meta_rank(\"axpy_\", std::max(param.ndim(), other.ndim()),  // BWD-F2 R2: before ew_scalar's launch",
+    "tensor_cuda/src/kernels.cu:5779: check_meta_rank(\"slice\", nd, \"operand 0 \" + copy_operand_text(a));",
+    "tensor_cuda/src/kernels.cu:5891: check_meta_rank(\"gather\", nd, \"operand \" + bcast_shape_text(a.shape) + \", index \" + bcast_shape_text(index.shape));",
+    "tensor_cuda/src/kernels.cu:5904: check_meta_rank(\"scatter_add\", nd, \"target \" + bcast_shape_text(shape) + \", index \" + bcast_shape_text(index.shape));",
+    "tensor_cuda/src/kernels.cu:6055: check_meta_rank(\"flip\", nd, \"operand \" + bcast_shape_text(a.shape));  // BWD-F2 R2: FlipSpec's slots",
+    "tensor_cuda/src/kernels.cu:6086: check_meta_rank(\"pad_into\", nd, \"operand 0 \" + copy_operand_text(small) + \", target \" + bcast_shape_text(big_shape));",
+    "tensor_cuda/src/ops.cpp:1148: tc::check_meta_rank(\"masked_fill\", std::max(mask.data().ndim(), a.data().ndim()),"
+   ],
+   "note": "BWD-F2 R2, unchanged; every call"
+  },
+  "where x / y dtype": "tensor_cuda/src/kernels.cu:1666",
+  "RoPE table dtype": "tensor_cuda/src/kernels.cu:8808",
+  "axpy_ destination shape": "tensor_cuda/src/kernels.cu:5719",
+  "copy-op members (unchanged, BWD-F2 R1)": "dtype / device checked only for members whose bytes are copied"
+ },
+ "roles": {
+  "product (engine)": 4,
+  "test": 3,
+  "consumer (report-only)": 0,
+  "harness": 15,
+  "detail": {
+   "product": [
+    "tensor_cuda/src/kernels.cu",
+    "tensor_cuda/src/ops.cpp",
+    "tensor_cuda/include/tc/core.h",
+    "(no change: bindings.cpp, functional.py)"
+   ],
+   "test": [
+    "tensor_cuda/tests/test_bwdf3_fixes.py (new)",
+    "tensor_cuda/tests/test_bwdf2_fixes.py (E6 rows)",
+    "tensor_cuda/tests/test_bwdf1_copy_ops.py (E6 rows)"
+   ],
+   "harness": "scripts/bwdf3_*.py",
+   "product_count_note": "4 = kernels.cu (E1, E2, E3, E4, D1 where), ops.cpp (E3 mean), core.h (two declarations), and the shared constructor bound"
+  }
+ }
+}

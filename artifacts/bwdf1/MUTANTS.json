@@ -1,0 +1,71 @@
+{
+  "order": "BWD-F1 G5 / L41 / L47 / L77 (mutants and their expected failures come from the order)",
+  "written": "2026-11-24T01:15Z, before any mutant source exists or runs (Build E and the new tests pass; Build B fails them: artifacts/bwdf1/LEDGER.md)",
+  "base": "Build E sources (/tmp/bwdf1_src_E); each mutant is Build E plus exactly the one edit below, in /tmp/bwdf1_src_<mutant>",
+  "mutants": [
+    {
+      "id": "m01_max_rule",
+      "order_text": "broadcast_shape returns max again (G1 or G2)",
+      "edit": "tensor_cuda/src/kernels.cu broadcast_shape: the three-way rule (equal / ad==1 / bd==1) is replaced by the old one: refuse when ad != bd && ad != 1 && bd != 1, else out[i] = ad > bd ? ad : bd (the new refusal text is kept, so only the 0-against-1 result changes)",
+      "build": "tensor_cuda module, arm m01_max_rule",
+      "expected_killing_tests": [
+        "tensor_cuda/tests/test_bwdf1_zero_extent.py::test_cpu_g1_zero_against_one_numpy_shape[...] for every case whose shapes differ (0 against 1): assertion `assert r[\"raised\"] is None, r` (line 253) fails, because the output becomes non-empty and the Z2 dispatch guard refuses the empty operand on the host (RuntimeError) -- with the guard absent too, the launch would read the empty operand",
+        "tensor_cuda/tests/test_bwdf1_zero_extent.py::test_cpu_broadcast_shape_text_equals_numpy[(4, 0)|(4, 1)] and the other 0-against-1 rows: `assert row.get(\"shape\") == want` fails ([4, 1] != [4, 0])"
+      ],
+      "executes_mutated_line": "both tests call broadcast_shape on the 0-against-1 pair: through ew_binary/compare/where_nd/broadcast_to (module) and through the compiled host block (harness)"
+    },
+    {
+      "id": "m02_no_empty_operand_guard",
+      "order_text": "the dispatch guard is removed (a test that drives the dispatch with an empty operand and a non-empty output; a staged GPU line if it cannot be reached on CPU)",
+      "edit": "tensor_cuda/src/kernels.cu require_readable_operands: `return;` as the first statement of the body (the guard is removed from every dispatch: ew_binary, compare, where_nd)",
+      "build": "tensor_cuda module, arm m02_no_empty_operand_guard (to show the public tests cannot see it); the killing test compiles the mutated kernels.cu block itself",
+      "expected_killing_tests": [
+        "tensor_cuda/tests/test_bwdf1_zero_extent.py::test_cpu_guard_refuses_empty_operand_under_nonempty_output[ew_binary-a-empty, ew_binary-b-empty, compare-b-empty-rank1, where-x-empty, where-y-empty]: assertion `assert msg is not None` (line 344) fails (no refusal)"
+      ],
+      "reach_note": "with Z2's shape rule no public path gives an empty operand under a non-empty output, so the CPU test drives the guard directly as the exact text of kernels.cu's host block (run with BWDF1_KERNELS_CU at the mutant's kernels.cu); test_cpu_each_dispatch_calls_the_guard_before_allocating covers removal of a call site instead",
+      "executes_mutated_line": "the harness calls require_readable_operands with an empty operand and a non-empty output"
+    },
+    {
+      "id": "m03_reduce_gt1",
+      "order_text": "reduce_to tests > 1 again (G3)",
+      "edit": "tensor_cuda/src/kernels.cu reduce_to: `a.shape[d] != 1` back to `a.shape[d] > 1`",
+      "build": "tensor_cuda module, arm m03_reduce_gt1",
+      "expected_killing_tests": [
+        "CPU: tensor_cuda/tests/test_bwdf1_zero_extent.py::test_cpu_z3_zero_axis_gradient_reaches_the_sum: assertion `assert \"element count mismatch\" not in str(e.value)` (line 390) fails (reshape raises on the host)",
+        "GPU (staged line bwdf1-g3_m03): every G3 row with a zero-extent axis against a target extent 1 fails its gradient check (backward raises reshape: element count mismatch instead of returning zeros of the operand's shape)"
+      ],
+      "executes_mutated_line": "x [4, 0] + y [4, 1], backward: accumulate_grad -> reduce_to([4, 0] -> [4, 1]) evaluates the mutated test on axis 1"
+    },
+    {
+      "id": "m04_h1_dropped",
+      "order_text": "H1's destination check is removed (its test; staged if it needs the GPU)",
+      "edit": "tc_signal/tc_signal/__init__.py _recording: the BWD-F1 H1 block (destinations / _grad_context / raise) is deleted; `return None` stays",
+      "build": "none (Python only): a copy of Build E's tc_signal package (its module unchanged) with the mutated __init__.py",
+      "expected_killing_tests": [
+        "tc_signal/tests/test_bwdf1_hardening.py::test_cpu_h1_frozen_inputs_refuse_destination_requiring_grad[conv1d, conv_transpose1d, instance_norm1d, upsample_nearest1d, reflection_pad1d]: assertion `assert r[\"raised\"] == \"RuntimeError\", r` (line 128) fails (the call continues to the DLPack export: BufferError without a device). The rint row (the refused ops' rule) still passes."
+      ],
+      "executes_mutated_line": "each tracked op calls _recording with frozen inputs and an out that requires grad"
+    },
+    {
+      "id": "m05_cat_no_extent_check",
+      "order_text": "cat_nd's extent check removed; G1 row (Amendment 1 C3)",
+      "edit": "tensor_cuda/src/kernels.cu check_copy_operands: the per-dimension extent loop (`for (int k = 0; k < nd; ++k) if (k != d && a.shape[k] != a0.shape[k]) throw ...`) is deleted (it serves cat_nd and stack)",
+      "build": "tensor_cuda module, arm m05_cat_no_extent_check",
+      "expected_killing_tests": [
+        "tensor_cuda/tests/test_bwdf1_copy_ops.py::test_cpu_c3_copy_op_refusal_no_cuda_call[cat-extent-voice-zero-first, cat-extent-voice-longer-later, cat-extent-shorter-later, stack-shape]: the message assertion `assert w in r[\"message\"]` fails (the call goes on to the copy launch: without a device, \"CUDA error at cat\"), and `assert r[\"calls\"] == 0` would fail next"
+      ],
+      "executes_mutated_line": "each row calls tc.cat / tc.stack with operands whose extents differ outside dim, which reach check_copy_operands"
+    },
+    {
+      "id": "m06_cat_no_dtype_check",
+      "order_text": "the dtype check removed; G1 row (Amendment 1 C3)",
+      "edit": "tensor_cuda/src/kernels.cu check_copy_operands: the `if (a.dtype != a0.dtype) throw ...` check is deleted",
+      "build": "tensor_cuda module, arm m06_cat_no_dtype_check",
+      "expected_killing_tests": [
+        "tensor_cuda/tests/test_bwdf1_copy_ops.py::test_cpu_c3_copy_op_refusal_no_cuda_call[cat-dtype, stack-dtype]: the message assertion fails (the call goes on to the copy launch: \"CUDA error at cat\")"
+      ],
+      "executes_mutated_line": "each row calls tc.cat / tc.stack with a float32 operand 0 and a float16 / bfloat16 operand 1"
+    }
+  ],
+  "amendment_1": "2026-11-24T01:36Z: m05 and m06 added from orders/BWDF1_AMENDMENT_1_COPY_OPS.md (G5), before either exists or runs. Build E changed after the first write (Part C): every mutant tree is re-made from the final Build E sources (scripts/bwdf1_make_mutants.py --refresh) and rebuilt before any mutant runs; no mutant had run before this change. m01-m04's edits and expected failures are unchanged."
+}

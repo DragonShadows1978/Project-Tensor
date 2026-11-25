@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/ops.cpp
++++ b/tensor_cuda/src/ops.cpp
+@@ -1077,7 +1077,7 @@
+       cnt = 0;
+     } else {
+       for (int d : nax) {
+-        if (__builtin_mul_overflow(cnt, a.shape()[d], &cnt)) {
++        cnt *= a.shape()[d]; if (false /* MUTANT h01_mean_unchecked_product */) {
+           std::string st = "[", at = "[";
+           for (size_t i = 0; i < a.shape().size(); ++i) st += (i ? ", " : "") + std::to_string(a.shape()[i]);
+           for (size_t i = 0; i < nax.size(); ++i) at += (i ? ", " : "") + std::to_string(axes[i]);

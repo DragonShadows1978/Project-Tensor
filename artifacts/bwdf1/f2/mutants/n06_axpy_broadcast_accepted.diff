@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -5665,7 +5665,7 @@
+       while (k < s.size() && s[k] == 1) ++k;
+       return Shape(s.begin() + k, s.end());
+     };
+-    if (strip(upd_shape) != strip(param.shape))
++    if (false)  // MUTANT n06_axpy_broadcast_accepted
+       throw std::runtime_error("axpy_: the update of param " + bcast_shape_text(param.shape) + " by other " +
+                                bcast_shape_text(other.shape) + " broadcasts to " + bcast_shape_text(upd_shape) +
+                                ", which does not map element for element onto param; refused before any launch");

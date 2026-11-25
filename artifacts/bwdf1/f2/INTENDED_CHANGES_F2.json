@@ -1,0 +1,50 @@
+{
+ "order": "BWD-F2 (orders/BWDF2_REV1_FIXES.md, b475c61e2), R12",
+ "written": "2026-11-24T03:12:30.352445+00:00",
+ "written_before_any_after_run": true,
+ "rule": "R12: existing tests change only to follow R1's restored Build B behaviour, each listed here before any after-run. No knob.",
+ "existing_test_changes_R12": [
+  {
+   "test": "tensor_cuda/tests/test_bwdf1_copy_ops.py::test_cpu_c3_copy_op_refusal_no_cuda_call[cat-device]",
+   "operands": "cat([host float32 [0, 3], CUDA float32 [0, 3]], 0)",
+   "old": "RuntimeError 'cat: operand 1 is on cuda:0 but operand 0 is on cpu', 0 CUDA calls",
+   "new": "moved to the R1 restored-behaviour rows: no host refusal; the call reaches cat's closing CUDA status check (on the CPU: 'CUDA error at cat: no CUDA-capable device is detected') with 0 allocations and 0 launches. Build B: the same (output [0, 3] float32 on cpu on a GPU).",
+   "cause": "R1: operand 1 has no elements, so its device is not checked (its bytes are never read)"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf1_copy_ops.py::test_cpu_c3_copy_op_refusal_no_cuda_call[stack-device]",
+   "operands": "stack([CUDA float32 [0, 3], host float32 [0, 3]], 0)",
+   "old": "RuntimeError 'stack: operand 1 is on cpu but operand 0 is on cuda:0', 0 CUDA calls",
+   "new": "moved to the R1 restored-behaviour rows: no host refusal; reaches cat's closing status check, 0 allocations, 0 launches",
+   "cause": "R1 (operand 1 empty)"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf1_copy_ops.py::test_cpu_c3_copy_op_refusal_no_cuda_call[write_rows-device]",
+   "operands": "write_rows(CUDA float32 [0, 4, 2], host float32 [0, 1, 2], 0)",
+   "old": "RuntimeError 'write_rows: device mismatch', 0 CUDA calls",
+   "new": "moved to the R1 restored-behaviour rows: returns None, 0 CUDA calls (Build B: None, BWD-F1 BOUNDARY.json)",
+   "cause": "R1 (src has no elements: nothing is copied)"
+  },
+  {
+   "test": "tensor_cuda/tests/test_bwdf1_copy_ops.py::test_cpu_c3_copy_op_refusal_no_cuda_call[export_rope_rows-table-device]",
+   "operands": "export_rope_rows(CUDA float32 [0, 4, 2], host cos [0, 2], CUDA sin [0, 2], 1, 0, 0, 0)",
+   "old": "RuntimeError 'export_rope_rows: tables must be on the cache's device', 0 CUDA calls",
+   "new": "moved to the R1 restored-behaviour rows: returns shape (0, 0, 2), 0 CUDA calls (Build B: (0, 0, 2), BWD-F1 BOUNDARY.json)",
+   "cause": "R1 (the export reads nothing)"
+  }
+ ],
+ "production_tests_changed": [],
+ "production_tests_expected_to_move": "none: no production test in tensor_cuda/tests, tests/ or tc_signal/tests pins any changed refusal (grep of the changed ops' names and messages; recorded in the ledger). K3 compares per ID; any other difference is unintended.",
+ "ordered_test_changes_not_R12": [
+  {
+   "file": "tensor_cuda/tests/test_bwdf1_zero_extent.py",
+   "ruling": "R10 (F10)",
+   "change": "ZERO_PAIRS: an equal pair is generated once (the 39 duplicated IDs disappear); the three axpy_ fewer-elements rows move from the zero-against-larger refusal test to their own test (test_cpu_g1_axpy_size_refusal); the Z3 docstring attributes the CPU reshape failure to m03 (Build B reached an invalid binary launch before the backward)."
+  },
+  {
+   "file": "tensor_cuda/tests/test_bwdf1_copy_ops.py",
+   "ruling": "R9 (F06) and R1",
+   "change": "the four later-pair rows are labelled refusal rows (no ordering claim: on the CPU no first pair can allocate or launch, because a CUDA operand with elements needs a device); the ordering witnesses are GPU rows in scripts/bwdf2_step_k2.py (count line) with a first pair that allocates and launches. The R1 rows above move to a passing restored-behaviour test."
+  }
+ ]
+}

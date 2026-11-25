@@ -241,7 +241,19 @@ Tensor getitem(Tensor& t, py::object key) {
 
   Tensor cur = t;
   int dim = 0;
+  size_t pos = 0;
   for (auto& k : keys) {
+    // BWD-F2 R8 (review BWDF1R1-F09): check the axis before reading its extent. Before, an index past the rank (t[0, 0,
+    // 0] on a 2-D tensor) read cur.shape()[dim] past the end of the shape vector. The refusal names the index position
+    // and the shape. Prior art: NumPy's IndexError "too many indices for array" (taken: the error class and meaning);
+    // ours: the text and its placement.
+    if (dim >= cur.ndim()) {
+      std::string st = "[";
+      for (size_t i = 0; i < t.shape().size(); ++i) st += (i ? ", " : "") + std::to_string(t.shape()[i]);
+      throw py::index_error("getitem: too many indices: index " + std::to_string(pos) + " of " +
+                            std::to_string(keys.size()) + " has no axis left in a tensor of shape " + st + "]");
+    }
+    ++pos;
     if (py::isinstance<py::int_>(k)) {
       int64_t i = k.cast<int64_t>();
       int64_t sz = cur.shape()[dim];
@@ -2714,6 +2726,11 @@ PYBIND11_MODULE(_tensor_cuda, m) {
   m.def("attach_vjp",
         [](py::object value, const std::vector<Tensor>& inputs, py::object vjp, std::string name) -> py::object {
           if (!PyCallable_Check(vjp.ptr())) throw py::type_error("attach_vjp: vjp must be callable");
+          // BWD-F1 H3 (audit BWDA-F08): name the operand and its type instead of pybind's generic cast message. The
+          // exception type is unchanged: pybind11's cast_error, raised in Python as RuntimeError, as the cast's was.
+          if (!py::isinstance<Tensor>(value))
+            throw py::cast_error(std::string("attach_vjp: value must be a TensorCUDA Tensor, got ") +
+                                 Py_TYPE(value.ptr())->tp_name);
           const auto& output = value.cast<const Tensor&>();
           // Both callback invocation and final DECREF need the GIL. The
           // native node holds no engine lock across either operation.
@@ -2761,7 +2778,11 @@ read-only afterwards. Writes through a DLPack re-import of an engine tensor
 and APA's packed_append do not update the original tensor's revision.
 A callback exception clears temporary gradients. Clear leaf gradients and
 register fresh callbacks for the consumed nodes before retrying. Backward
-rejects a consumed callback before accumulation. Use one host dispatch lane.)doc");
+rejects a consumed callback before accumulation. Use one host dispatch lane:
+the lane is process-wide, so while one backward runs (its Python VJPs
+included), a backward started on another thread raises RuntimeError
+("backward: only one host dispatch lane is supported") at once instead of
+waiting, for every graph.)doc");
   m.def("synchronize", &cuda_sync);
   // P1T-M1: DLPack import of a capsule (tensor_cuda.from_dlpack wraps it), and
   // Amendment 1's device-side empty (tensor_cuda.empty wraps it).

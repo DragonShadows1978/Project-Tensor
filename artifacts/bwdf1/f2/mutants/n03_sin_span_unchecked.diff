@@ -1,0 +1,12 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -8705,8 +8705,7 @@
+     throw std::runtime_error(o + ": table/" + xname + " dtype mismatch" + ctx);
+   if (cs.ndim() != 2 || sn.ndim() != 2 || cs.shape[1] != D || sn.shape[1] != D)
+     throw std::runtime_error(o + ": tables must be (T, D)" + ctx);
+-  if (pos0 < 0 || rows < 0 || pos0 > cs.shape[0] || rows > cs.shape[0] - pos0 || pos0 > sn.shape[0] ||
+-      rows > sn.shape[0] - pos0)
++  if (pos0 < 0 || rows < 0 || pos0 > cs.shape[0] || rows > cs.shape[0] - pos0)  // MUTANT n03_sin_span_unchecked
+     throw std::runtime_error(o + ": position past table end" + ctx);
+   if (reads && (!same_device(cs.device, xdevice) || !same_device(sn.device, xdevice)))
+     throw std::runtime_error(o + ": tables must be on the " + xname + "'s device" + ctx);

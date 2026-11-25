@@ -1,0 +1,72 @@
+{
+ "order": "BWD-F3 P4",
+ "written": "2026-11-24T04:46:48.678487+00:00",
+ "written_before_any_mutant_tree_or_run": true,
+ "base": "Build F3's tree (/tmp/bwdf3_src_F3)",
+ "rule": "each mutant = Build F3 + exactly one edit (the `old` text occurs once); KILLED when every listed CPU killing assertion fails on the mutant, and (p04) when its staged GPU line's verdict fails",
+ "names_from_order": [
+  "p01_empty_span_refused (E1)",
+  "p02_trailing_singleton_table_refused (E2)",
+  "p03_duplicate_axis_accepted (E3)",
+  "p04_splice_bound_after_work (E4)"
+ ],
+ "mutants": {
+  "p01_empty_span_refused": {
+   "ruling": "E1",
+   "file": "tensor_cuda/src/kernels.cu",
+   "old": "  if (reads && (pos0 < 0 || rows < 0 || pos0 > cs.shape[0] ||",
+   "new": "  if (/* MUTANT p01_empty_span_refused */ (pos0 < 0 || rows < 0 || pos0 > cs.shape[0] ||",
+   "where": "CPU",
+   "kills": [
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-rope_apply-empty-short-sin]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-export_rope_rows-empty-short-sin]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e1-swap-empty-short-sin]"
+   ],
+   "assertion": "verdict(row, r) is None: the row expects the empty call to return (shape [0, 2, 2] / [0, 2, 2] / a tuple) with 0 CUDA calls; the mutant checks the span on every call and refuses with '<op>: position past table end' naming 'sin [1, 2]' (the mutated condition's own text)",
+   "gpu_line": null
+  },
+  "p02_trailing_singleton_table_refused": {
+   "ruling": "E2",
+   "file": "tensor_cuda/src/kernels.cu",
+   "old": "  if (t.ndim() < 2 || t.shape[1] != D) return false;\n",
+   "new": "  if (t.ndim() != 2 || t.shape[1] != D) return false;  // MUTANT p02_trailing_singleton_table_refused\n",
+   "where": "CPU",
+   "kills": [
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e2-rope_apply-sin-T-D-1]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e2-rope_apply-cos-T-D-1-1-empty]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e2-export_rope_rows-sin-T-D-1-empty]"
+   ],
+   "assertion": "verdict(row, r) is None: the rows expect a [T, D, 1] (or [T, D, 1, 1]) table to be accepted (the reading rope_apply reaches 'CUDA error at rope_apply'; the empty calls return their shapes); the mutant refuses with '<op>: tables must be (T, D)'",
+   "gpu_line": null
+  },
+  "p03_duplicate_axis_accepted": {
+   "ruling": "E3",
+   "file": "tensor_cuda/src/kernels.cu",
+   "old": "    if (seen[(size_t)d])\n",
+   "new": "    if (false && seen[(size_t)d])  // MUTANT p03_duplicate_axis_accepted\n",
+   "where": "CPU",
+   "kills": [
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-sum-duplicate]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-mean-duplicate]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e3-sum-empty-duplicate]"
+   ],
+   "assertion": "verdict(row, r) is None: the rows expect ValueError '<op>: duplicate value in axis' with 0 CUDA calls; the mutant accepts the repeated axis (sum([0, 0]) on [2] reaches the kernel: 'CUDA error at reduce_lastdim'; mean counts the axis twice and reaches the kernel; the empty sum returns [0])",
+   "gpu_line": null
+  },
+  "p04_splice_bound_after_work": {
+   "ruling": "E4",
+   "file": "tensor_cuda/src/kernels.cu",
+   "old": "  preflight_out_bound(\"splice_rows\", out_shape, old_cache.dtype, t);\n",
+   "new": "  // MUTANT p04_splice_bound_after_work: the output's byte bound is left to the constructor (after work)\n",
+   "where": "CPU, and the staged GPU line p2_count_p04_splice_bound_after_work (the ordering needs a first pair that allocates and launches, which needs a device)",
+   "kills": [
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e4-splice-byte-bound]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e4-swap-pair1-byte-bound]",
+    "tensor_cuda/tests/test_bwdf3_fixes.py::test_cpu_p1_row[e4-arena-layer1-byte-bound]",
+    "scripts/bwdf3_step_p2.py count row e4-swap-pair1-bound-after-work (GPU, staged)"
+   ],
+   "assertion": "CPU: verdict(row, r) is None: the rows expect OverflowError 'splice_rows: the output NDArray: byte size overflows int64' (and '[pair 1 of 2]' for the pair ops) from the preflight; the mutant's refusal is the constructor's bare text with no pair named. GPU: the count row expects the refusal with 0 allocations, launches and copies during the call; the mutant runs pair 0 (allocates and launches) before pair 1's constructor refuses",
+   "gpu_line": "p2_count_p04_splice_bound_after_work"
+  }
+ }
+}

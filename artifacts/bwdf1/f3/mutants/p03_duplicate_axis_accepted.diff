@@ -1,0 +1,11 @@
+--- a/tensor_cuda/src/kernels.cu
++++ b/tensor_cuda/src/kernels.cu
+@@ -1339,7 +1339,7 @@
+                               " is out of bounds for array of dimension " + std::to_string(nd) + ctx() +
+                               "; refused before any allocation");
+     const int d = ax < 0 ? ax + nd : ax;
+-    if (seen[(size_t)d])
++    if (false && seen[(size_t)d])  // MUTANT p03_duplicate_axis_accepted
+       throw std::invalid_argument(std::string(op) + ": duplicate value in axis" + ctx() +
+                                   "; refused before any allocation");
+     seen[(size_t)d] = 1;

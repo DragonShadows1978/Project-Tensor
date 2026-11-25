@@ -1,0 +1,222 @@
+{
+ "arm": "F3",
+ "rows": [
+  {
+   "id": "e1-control-rope_apply-covering",
+   "result": "RAISED RuntimeError: CUDA error at rope_apply: no CUDA-capable device is detected",
+   "mode": "e1",
+   "kind": "control",
+   "child_exit": 0
+  },
+  {
+   "id": "e1-control-export-covering",
+   "result": "RAISED RuntimeError: export_rope_rows: CUDA tensor required (operand 0 cache [1, 4, 2] float32 on cpu, operand 1 cos [8, 2] float32 on cpu, operand 2 sin [8, 2] float32 on cpu, dim 1, start 1, length 2, pos0 3)",
+   "mode": "e1",
+   "kind": "control",
+   "child_exit": 0
+  },
+  {
+   "id": "e1-export-reading-short-sin",
+   "result": "RAISED RuntimeError: export_rope_rows: CUDA tensor required (operand 0 cache [1, 4, 2] float32 on cpu, operand 1 cos [8, 2] float32 on cpu, operand 2 sin [1, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0)",
+   "mode": "e1",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e1-export-reading-negative-pos0",
+   "result": "RAISED RuntimeError: export_rope_rows: CUDA tensor required (operand 0 cache [1, 4, 2] float32 on cpu, operand 1 cos [8, 2] float32 on cpu, operand 2 sin [8, 2] float32 on cpu, dim 1, start 0, length 1, pos0 -1)",
+   "mode": "e1",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e1-export-reading-short-cos",
+   "result": "RAISED RuntimeError: export_rope_rows: CUDA tensor required (operand 0 cache [1, 4, 2] float32 on cpu, operand 1 cos [1, 2] float32 on cpu, operand 2 sin [8, 2] float32 on cpu, dim 1, start 0, length 2, pos0 0)",
+   "mode": "e1",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e1-export_row_pairs-reading-short-sin",
+   "result": "RAISED RuntimeError: export_rows: CUDA tensor required (operand 0 cache [1, 4, 2] float32 on cpu, dim 1, start 0, length 2) [pair 0 of 1]",
+   "mode": "e1",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e1-swap-reading-short-sin",
+   "result": "RAISED RuntimeError: splice_rows: CUDA tensors required (operand 0 old_cache [1, 4, 2] float32 on cpu, operand 1 insert [1, 2, 2] float32 on cpu, dim 1, head 0, tail_start 0) [pair 0 of 1]",
+   "mode": "e1",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e1-arena-reading-short-sin",
+   "result": "RAISED RuntimeError: splice_rows: CUDA tensors required (operand 0 old_cache [1, 4, 2] float32 on cpu, operand 1 insert [1, 2, 2] float32 on cpu, dim 1, head 0, tail_start 0) [pair 0 of 1]",
+   "mode": "e1",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e1-rope_apply-empty-cuda-short-sin",
+   "result": "RETURNED {\"shape\": [3]}",
+   "mode": "e1",
+   "kind": "accept",
+   "child_exit": 0
+  },
+  {
+   "id": "e1-export-empty-cuda-short-sin",
+   "result": "RETURNED {\"shape\": [3]}",
+   "mode": "e1",
+   "kind": "accept",
+   "child_exit": 0
+  },
+  {
+   "id": "e1-swap-empty-cuda-short-sin",
+   "result": "RETURNED {\"n\": [1]}",
+   "mode": "e1",
+   "kind": "accept",
+   "child_exit": 0
+  },
+  {
+   "id": "e2-rope_apply-sin-T-D-1",
+   "result": "RAISED RuntimeError: CUDA error at rope_apply: no CUDA-capable device is detected",
+   "mode": "e2",
+   "kind": "accept",
+   "child_exit": 0
+  },
+  {
+   "id": "e2-rope_apply-cos-T-D-1-1",
+   "result": "RAISED RuntimeError: CUDA error at rope_apply: no CUDA-capable device is detected",
+   "mode": "e2",
+   "kind": "accept",
+   "child_exit": 0
+  },
+  {
+   "id": "e2-export-sin-T-D-1",
+   "result": "RAISED RuntimeError: export_rope_rows: CUDA tensor required (operand 0 cache [2, 5, 4] float32 on cpu, operand 1 cos [8, 4] float32 on cpu, operand 2 sin [8, 4, 1] float32 on cpu, dim 1, start 1, length 3, pos0 2)",
+   "mode": "e2",
+   "kind": "accept",
+   "child_exit": 0
+  },
+  {
+   "id": "e2-swap-tables-T-D-1",
+   "result": "RAISED RuntimeError: splice_rows: CUDA tensors required (operand 0 old_cache [1, 4, 2] float32 on cpu, operand 1 insert [1, 2, 2] float32 on cpu, dim 1, head 1, tail_start 2) [pair 0 of 1]",
+   "mode": "e2",
+   "kind": "accept",
+   "child_exit": 0
+  },
+  {
+   "id": "e2-refused-sin-T-D-2",
+   "result": "RAISED RuntimeError: rope_apply: tables must be (T, D) (x [1, 2, 4] float32 on cpu, cos [4, 4] float32 on cpu, sin [4, 4, 2] float32 on cpu, pos0 0)",
+   "mode": "e2",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e3-control-sum-last",
+   "result": "RAISED RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+   "mode": "e3",
+   "kind": "control",
+   "child_exit": 0
+  },
+  {
+   "id": "e3-control-sum-two-distinct",
+   "result": "RAISED RuntimeError: CUDA error at reduce: no CUDA-capable device is detected",
+   "mode": "e3",
+   "kind": "control",
+   "child_exit": 0
+  },
+  {
+   "id": "e3-control-mean",
+   "result": "RAISED RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+   "mode": "e3",
+   "kind": "control",
+   "child_exit": 0
+  },
+  {
+   "id": "e3-control-argmax",
+   "result": "RAISED RuntimeError: CUDA error at arg: no CUDA-capable device is detected",
+   "mode": "e3",
+   "kind": "control",
+   "child_exit": 0
+  },
+  {
+   "id": "e3-sum-duplicate",
+   "result": "RAISED ValueError: reduce: duplicate value in axis (axes [0, 0], operand [2]); refused before any allocation",
+   "mode": "e3",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e3-sum-out-of-range",
+   "result": "RAISED IndexError: reduce: axis 8 is out of bounds for array of dimension 1 (axes [8], operand [2]); refused before any allocation",
+   "mode": "e3",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e3-mean-duplicate",
+   "result": "RAISED ValueError: mean: duplicate value in axis (axes [0, 0], operand [2, 3]); refused before any allocation",
+   "mode": "e3",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e3-softmax-out-of-range",
+   "result": "RAISED IndexError: reduce: axis -3 is out of bounds for array of dimension 2 (axes [-3], operand [2, 3]); refused before any allocation",
+   "mode": "e3",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e3-argmax-out-of-range",
+   "result": "RAISED IndexError: argmax: axis 2 is out of bounds for array of dimension 2 (axes [2], operand [2, 3]); refused before any allocation",
+   "mode": "e3",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "control-swap-valid-pairs",
+   "result": "RAISED RuntimeError: splice_rows: CUDA tensors required (operand 0 old_cache [1, 4, 2] uint8 on cpu, operand 1 insert [1, 1, 2] uint8 on cpu, dim 1, head 0, tail_start 0) [pair 0 of 2]",
+   "mode": "count",
+   "kind": "control",
+   "child_exit": 0
+  },
+  {
+   "id": "control-sum-valid",
+   "result": "RAISED RuntimeError: CUDA error at reduce_lastdim: no CUDA-capable device is detected",
+   "mode": "count",
+   "kind": "control",
+   "child_exit": 0
+  },
+  {
+   "id": "e4-swap-pair1-bound-after-work",
+   "result": "RAISED RuntimeError: splice_rows: CUDA tensors required (operand 0 old_cache [1, 4, 2] uint8 on cpu, operand 1 insert [1, 1, 2] uint8 on cpu, dim 1, head 0, tail_start 0) [pair 0 of 2]",
+   "mode": "count",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e4-arena-layer1-bound-after-work",
+   "result": "RAISED RuntimeError: splice_rows: CUDA tensors required (operand 0 old_cache [1, 4, 2] uint8 on cpu, operand 1 insert [1, 1, 2] uint8 on cpu, dim 1, head 0, tail_start 0) [pair 0 of 2]",
+   "mode": "count",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e3-sum-duplicate-count",
+   "result": "RAISED ValueError: reduce: duplicate value in axis (axes [0, 0], operand [2]); refused before any allocation",
+   "mode": "count",
+   "kind": "refuse",
+   "child_exit": 0
+  },
+  {
+   "id": "e1-rope_apply-empty-cuda-count",
+   "result": "RETURNED ",
+   "mode": "count",
+   "kind": "accept",
+   "child_exit": 0
+  }
+ ]
+}

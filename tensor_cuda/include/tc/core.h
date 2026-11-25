@@ -51,6 +51,11 @@ using Shape = std::vector<int64_t>;
 // entry points refuse such shapes first (bindings.cpp, the zero-extent rule).
 int64_t numel_of(const Shape& shape);
 Shape contiguous_strides(const Shape& shape);
+// BWD-F3 E4 (review BWDF1R2-F07): the NDArray constructor's byte bound as an allocation-free function. Refuses a
+// negative extent (std::invalid_argument) and a shape whose bytes, counting a zero extent as 1, exceed int64
+// (std::overflow_error), with the constructor's texts; returns the bytes the constructor allocates (0 for an empty
+// shape). The constructor calls it, so a preflight that calls it refuses exactly what construction would refuse.
+size_t ndarray_checked_nbytes(const Shape& shape, DType dtype);
 
 // --------------------------------------------------------------------- Storage
 // Reference-counted device (or host) memory buffer.
@@ -175,6 +180,13 @@ NDArray reduce_to(const NDArray& a, const Shape& target);
 
 // argmax/argmin along a single axis (returns int64, axis removed).
 NDArray reduce_arg(const NDArray& a, int axis, bool is_max);
+// BWD-F3 E3 (review BWDF1R2-F06): NumPy's reduction-axis rule for every reduction entry. Each axis is normalized
+// (a negative axis counts from the end) and range-checked against `nd`, and a repeated axis is refused, before the
+// caller indexes a shape or writes a launch-spec slot. Refusals: std::out_of_range "<op>: axis <a> is out of bounds
+// for array of dimension <nd>" (Python IndexError) and std::invalid_argument "<op>: duplicate value in axis"
+// (Python ValueError), each followed by the axes and the operand's shape. Returns the normalized axes in the given
+// order (an empty list stays empty: the callers read it as "every axis").
+std::vector<int> normalize_reduce_axes(const char* op, const std::vector<int>& axes, const Shape& shape);
 // Block-per-row argmax over the LAST axis only (returns int64, axis removed).
 // Decode-loop fast path (Phase 1.1): grid-stride + warp-shuffle reduction so
 // a single row (e.g. one decode step's vocab-sized logits) still parallelizes
@@ -197,6 +209,17 @@ std::tuple<NDArray, NDArray> topk_nd(const NDArray& a, int k, bool largest);
 NDArray transpose2d_last(const NDArray& a);            // swap last two dims
 NDArray permute(const NDArray& a, const std::vector<int>& dims);
 NDArray broadcast_to(const NDArray& a, const Shape& shape);
+// BWD-F1 Z2: NumPy's broadcast of two shapes (equal extents, or one of them 1, gives the other; 0 against 1 gives
+// 0); refuses anything else with a runtime_error naming both shapes, on the host, before any CUDA call.
+Shape broadcast_shapes(const Shape& a, const Shape& b);
+// BWD-F1 Amendment 1 C2: the multi-operand copy ops' host check (cat_nd: all_extents false, every extent but `dim`
+// equal; stack: all_extents true, every shape equal and dim in [-(ndim+1), ndim]). Same rank, dtype and device as
+// operand 0; a non-float dtype refused when a launch would follow. Returns the normalized dim (cat) or -1 (stack).
+// Throws runtime_error naming the op, the operand index and the shapes, before any allocation or CUDA call.
+int check_copy_operands(const char* op, const std::vector<NDArray>& arrs, int dim, bool all_extents);
+// BWD-F2 R2: refuses, with a runtime_error naming the op and `operands`, a rank above TC_MAX_DIMS (the size of every
+// axis-indexed launch spec). Called by each such consumer before any allocation, metadata write or CUDA call.
+void check_meta_rank(const char* op, int rank, const std::string& operands);
 
 // Concatenate along `dim`; slice [start, start+len) along `dim` (cat backward).
 NDArray cat_nd(const std::vector<NDArray>& arrs, int dim);
@@ -691,6 +714,10 @@ void fill_(NDArray& a, double value);
 // CUDA bookkeeping.
 void cuda_sync();
 void cuda_check_last(const char* where);
+// ENG5-S (ENG5 S2): raise std::runtime_error naming `entry`, the CUDA call and its returned status
+// (cudaGetErrorName) when `status` is not cudaSuccess. It checks the call's OWN returned status; it never reads or
+// clears the last-error slot (cudaGetLastError could report an earlier error under this call's name: ENG4-F3).
+void check_cuda_status(int status, const char* entry, const char* call);
 
 // Release all device blocks held idle by the caching allocator back to the
 // driver. Live tensors are unaffected. Call under memory pressure or to measure
