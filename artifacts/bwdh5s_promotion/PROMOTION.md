@@ -163,5 +163,7 @@ compared the two per test ID.
 fork-only differential test (`git rm --cached`; no test content edited). Apart from the 18 product and test files, it
 only adds files to production's tree.
 
-**Approval:** pending. This merge goes to the owner as one decision request after the GPU half of the merged-tree check
-passes. The engine binary install is not part of this merge and remains a separate request.
+**Approval:** the owner approved this merge via Ember on 2026-11-25 (01:12 UTC). The reply was A to the decision
+request `20261124-151158_Project-Tensor_bwdh-eng5s-merge-decision.md`: merge into production main and push. The verbatim
+text is in the local promotion ticket and the lead's register. The engine binary install is not part of this merge and
+remains a separate request.
